@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "659820292486",
+    "project_id": "transify-2ba67",
+    "storage_bucket": "transify-2ba67.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:659820292486:android:4589198af17e648cf1a407",
+        "android_client_info": {
+          "package_name": "com.transify.logisticsapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCjsSTPcjOUZs4Y_5pQTjK0sC3okTZmdn0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
