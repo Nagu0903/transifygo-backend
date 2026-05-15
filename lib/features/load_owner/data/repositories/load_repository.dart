@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:transify_app/core/network/api_service.dart';
 
 class LoadRepository {
@@ -83,6 +84,17 @@ class LoadRepository {
     try {
       await _apiService.delete('/loads/$loadId');
     } catch (e) {
+      rethrow;
+    }
+  }
+
+  // 7. Cancel a Load (Owner only)
+  Future<void> cancelLoad(String loadId) async {
+    try {
+      // Using the exact path requested by user: /api/load/cancel/:loadId
+      await _apiService.post('/load/cancel/$loadId', {}, isPut: true);
+    } catch (e) {
+      debugPrint('[LOAD_REPO] Cancel Load Error: $e');
       rethrow;
     }
   }

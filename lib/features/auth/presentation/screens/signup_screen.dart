@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
+import 'package:transify_app/core/constants/app_colors.dart';
 import 'package:transify_app/core/localization/language_provider.dart';
 import 'package:transify_app/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:transify_app/features/load_owner/presentation/screens/owner_dashboard_screen.dart';
 import 'package:transify_app/features/driver/presentation/screens/driver_dashboard_screen.dart';
 import 'package:transify_app/core/utils/snackbar_utils.dart';
-
 
 
 class SignupScreen extends StatefulWidget {
@@ -45,56 +45,94 @@ class _SignupScreenState extends State<SignupScreen> {
         }
       },
       child: Scaffold(
-        appBar: AppBar(title: Text('${lang.translate('signup')} - ${lang.translate(widget.role.toLowerCase().replaceAll(' ', '_'))}')),
+        backgroundColor: Colors.white,
         body: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              TextField(
-                controller: _nameController,
-                decoration: InputDecoration(labelText: lang.translate('full_name'), prefixIcon: const Icon(Icons.person)),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: InputDecoration(labelText: lang.translate('phone_number'), prefixIcon: const Icon(Icons.phone)),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                keyboardType: isOwner ? TextInputType.number : TextInputType.text,
-                maxLength: isOwner ? 4 : null,
-                decoration: InputDecoration(
-                  labelText: isOwner ? lang.translate('pin') : lang.translate('password'),
-                  prefixIcon: const Icon(Icons.lock),
+              _buildHeader(lang),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _nameController,
+                      decoration: InputDecoration(
+                        labelText: lang.translate('full_name'),
+                        prefixIcon: const Icon(Icons.person_outline, color: AppColors.primaryBlue),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        labelText: lang.translate('phone_number'),
+                        prefixIcon: const Icon(Icons.phone_android, color: AppColors.primaryBlue),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _passwordController,
+                      obscureText: true,
+                      keyboardType: isOwner ? TextInputType.number : TextInputType.text,
+                      maxLength: isOwner ? 4 : null,
+                      decoration: InputDecoration(
+                        labelText: isOwner ? lang.translate('pin') : lang.translate('password'),
+                        prefixIcon: Icon(isOwner ? Icons.lock_open : Icons.lock_outline, color: AppColors.primaryBlue),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _cityController,
+                      decoration: InputDecoration(
+                        labelText: lang.translate('village_city'),
+                        prefixIcon: const Icon(Icons.location_city_outlined, color: AppColors.primaryBlue),
+                      ),
+                    ),
+                    if (isDriver) ...[
+                      const SizedBox(height: 16),
+                      _buildVehiclePicker(lang),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _vehicleNumberController,
+                        decoration: InputDecoration(
+                          labelText: lang.translate('vehicle_number'),
+                          prefixIcon: const Icon(Icons.numbers_outlined, color: AppColors.primaryBlue),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 40),
+                    BlocBuilder<AuthBloc, AuthState>(
+                      builder: (context, state) {
+                        return ElevatedButton(
+                          onPressed: state is AuthLoading ? null : _onSignup,
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 55),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                          ),
+                          child: state is AuthLoading
+                              ? const CircularProgressIndicator(color: Colors.white)
+                              : Text(lang.translate('signup').toUpperCase(), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('Already have an account?', style: TextStyle(color: Colors.grey)),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text(
+                            'Login',
+                            style: TextStyle(color: AppColors.primaryBlue, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 40),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _cityController,
-                decoration: InputDecoration(labelText: lang.translate('village_city'), prefixIcon: const Icon(Icons.location_city)),
-              ),
-              if (isDriver) ...[
-                const SizedBox(height: 16),
-                _buildVehiclePicker(lang),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _vehicleNumberController,
-                  decoration: InputDecoration(labelText: lang.translate('vehicle_number'), prefixIcon: const Icon(Icons.numbers)),
-                ),
-              ],
-              const SizedBox(height: 40),
-              BlocBuilder<AuthBloc, AuthState>(
-                builder: (context, state) {
-                  return ElevatedButton(
-                    onPressed: state is AuthLoading ? null : _onSignup,
-                    child: state is AuthLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : Text(lang.translate('signup')),
-                  );
-                },
               ),
             ],
           ),
@@ -103,10 +141,63 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
+  Widget _buildHeader(LanguageProvider lang) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.only(top: 60, bottom: 40, left: 24, right: 24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.primaryBlue,
+            AppColors.primaryBlue.withValues(alpha: 0.8),
+          ],
+        ),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(40),
+          bottomRight: Radius.circular(40),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+            padding: EdgeInsets.zero,
+            alignment: Alignment.centerLeft,
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Join TransifyGo',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Create account as ${widget.role}',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildVehiclePicker(LanguageProvider lang) {
     final types = ['Tractor', 'Pickup', 'Mini Truck', 'Tempo', 'Lorry', 'Container', 'Trailer'];
     return DropdownButtonFormField<String>(
-      decoration: InputDecoration(labelText: lang.translate('vehicle_type'), prefixIcon: const Icon(Icons.drive_eta)),
+      decoration: InputDecoration(
+        labelText: lang.translate('vehicle_type'),
+        prefixIcon: const Icon(Icons.drive_eta_outlined, color: AppColors.primaryBlue),
+      ),
       items: types.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
       onChanged: (val) => _vehicleTypeController.text = val ?? '',
     );

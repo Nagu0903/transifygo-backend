@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
@@ -17,10 +18,26 @@ class FindLoadsTab extends StatefulWidget {
 class _FindLoadsTabState extends State<FindLoadsTab> {
   String _searchQuery = "";
 
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
-    context.read<LoadBloc>().add(FetchPendingLoadsRequested());
+    _fetchPending();
+    // Auto refresh every 20 seconds for real-time feel
+    _refreshTimer = Timer.periodic(const Duration(seconds: 20), (timer) => _fetchPending());
+  }
+
+  void _fetchPending() {
+    if (mounted) {
+      context.read<LoadBloc>().add(FetchPendingLoadsRequested());
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -42,7 +59,17 @@ class _FindLoadsTabState extends State<FindLoadsTab> {
           ),
         ),
         Expanded(
-          child: BlocBuilder<LoadBloc, LoadState>(
+          child: BlocListener<LoadBloc, LoadState>(
+            listener: (context, state) {
+              if (state is LoadSuccess) {
+                final msg = state.message.toLowerCase();
+                if (msg.contains('accepted') || msg.contains('cancelled')) {
+                  debugPrint('[DRIVER] List change detected, refreshing...');
+                  _fetchPending();
+                }
+              }
+            },
+            child: BlocBuilder<LoadBloc, LoadState>(
             builder: (context, state) {
               if (state is LoadLoading) return const Center(child: CircularProgressIndicator());
               
@@ -90,6 +117,7 @@ class _FindLoadsTabState extends State<FindLoadsTab> {
             },
           ),
         ),
+      ),
       ],
     );
   }
@@ -227,6 +255,8 @@ class _FindLoadsTabState extends State<FindLoadsTab> {
                 Navigator.pop(ctx);
                 // Refresh loads
                 context.read<LoadBloc>().add(FetchPendingLoadsRequested());
+                
+                // Show a brief message if it fails on backend (optional, but Bloc usually handles error)
               }
             },
             child: const Text('Accept', style: TextStyle(fontWeight: FontWeight.bold)),

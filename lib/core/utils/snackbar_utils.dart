@@ -12,6 +12,14 @@ class SnackBarUtils {
   }
 
   static void showError(BuildContext context, String message) {
+    // Filter out technical API key errors for professional UI
+    if (message.toLowerCase().contains('api key') || 
+        message.toLowerCase().contains('invalid key') ||
+        message.toLowerCase().contains('provided api key')) {
+      debugPrint('Suppressed technical error: $message');
+      return;
+    }
+
     _showSnackBar(
       context,
       message: message,

@@ -6,6 +6,7 @@ class SessionService {
   static const String _keyUserRole = 'user_role';
   static const String _keyUserName = 'user_name';
   static const String _keyUserPhone = 'user_phone';
+  static const String _keyUserFullName = 'user_fullname';
   static const String _keyToken = 'jwt_token';
 
   static Future<void> saveSession({
@@ -13,6 +14,7 @@ class SessionService {
     required String role,
     required String name,
     required String phone,
+    String? fullName,
     String? token,
   }) async {
     final prefs = await SharedPreferences.getInstance();
@@ -21,6 +23,7 @@ class SessionService {
     await prefs.setString(_keyUserRole, role);
     await prefs.setString(_keyUserName, name);
     await prefs.setString(_keyUserPhone, phone);
+    if (fullName != null) await prefs.setString(_keyUserFullName, fullName);
     if (token != null) await prefs.setString(_keyToken, token);
   }
 
@@ -41,6 +44,7 @@ class SessionService {
       'role': prefs.getString(_keyUserRole),
       'name': prefs.getString(_keyUserName),
       'phone': prefs.getString(_keyUserPhone),
+      'fullName': prefs.getString(_keyUserFullName),
       'token': prefs.getString(_keyToken),
     };
   }

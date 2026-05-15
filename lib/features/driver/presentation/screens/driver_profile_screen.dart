@@ -34,7 +34,7 @@ class DriverProfileScreen extends StatelessWidget {
                   child: Icon(Icons.drive_eta, size: 60, color: Colors.white),
                 ),
                 const SizedBox(height: 16),
-                Text(data['name'] ?? 'Driver', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                Text(data['fullName'] ?? data['name'] ?? 'Driver', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                 Text(data['phone'] ?? '', style: const TextStyle(color: Colors.grey)),
                 const SizedBox(height: 32),
                 _buildSection(context, lang, 'Support', [

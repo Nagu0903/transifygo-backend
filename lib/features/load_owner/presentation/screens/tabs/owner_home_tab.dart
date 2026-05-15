@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
+import 'package:transify_app/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:transify_app/core/constants/app_colors.dart';
 import 'package:transify_app/core/localization/language_provider.dart';
 import 'package:transify_app/core/services/session_service.dart';
@@ -36,14 +37,17 @@ class _OwnerHomeTabState extends State<OwnerHomeTab> {
       appBar: AppBar(
         title: Text(lang.translate('app_name'), style: const TextStyle(fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none)),
+          IconButton(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())), 
+            icon: const Icon(Icons.notifications_active_outlined, color: AppColors.primaryBlue)
+          ),
         ],
       ),
       body: FutureBuilder<Map<String, String?>>(
         future: SessionService.getSession(),
         builder: (context, sessionSnap) {
           if (!sessionSnap.hasData) return const Center(child: CircularProgressIndicator());
-          final name = sessionSnap.data!['name'] ?? 'User';
+          final name = sessionSnap.data!['fullName'] ?? sessionSnap.data!['name'] ?? 'User';
 
           return BlocBuilder<LoadBloc, LoadState>(
             builder: (context, state) {

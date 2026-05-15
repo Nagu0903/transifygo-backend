@@ -18,8 +18,8 @@ class LanguageProvider extends ChangeNotifier {
   }
 
   static const Map<String, String> _englishValues = {
-    'app_name': 'TRANSIFY',
-    'tagline': 'SMART LOAD BOOKING NETWORK',
+    'app_name': 'TransifyGo',
+    'tagline': "India's Smart Transport Network",
     'login': 'Login',
     'signup': 'Sign Up',
     'phone_number': 'Phone Number',
@@ -64,8 +64,8 @@ class LanguageProvider extends ChangeNotifier {
   };
 
   static const Map<String, String> _kannadaValues = {
-    'app_name': 'TRANSIFY',
-    'tagline': 'ಸ್ಮಾರ್ಟ್ ಲೋಡ್ ಬುಕಿಂಗ್ ನೆಟ್‌ವರ್ಕ್',
+    'app_name': 'TransifyGo',
+    'tagline': "ಭಾರತದ ಸ್ಮಾರ್ಟ್ ಸಾರಿಗೆ ನೆಟ್‌ವರ್ಕ್",
     'login': 'ಲಾಗಿನ್',
     'signup': 'ಸೈನ್ ಅಪ್',
     'phone_number': 'ಫೋನ್ ಸಂಖ್ಯೆ',

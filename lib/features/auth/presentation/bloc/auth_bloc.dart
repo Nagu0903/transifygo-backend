@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:transify_app/core/services/session_service.dart';
+import 'package:transify_app/core/services/notification_service.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../domain/models/user_model.dart';
 
@@ -87,13 +88,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       } else if (user.isBlocked) {
         emit(AuthError('Your account has been blocked'));
       } else {
-        // Save session
         await SessionService.saveSession(
           uid: user.id!,
           role: user.role,
           name: user.name,
           phone: user.phone,
+          fullName: user.fullName,
         );
+        
+        // Update notification token
+        await NotificationService.updateToken();
+
         emit(AuthAuthenticated(role: user.role, uid: user.id!));
       }
     } catch (e) {
@@ -138,7 +143,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         role: createdUser.role,
         name: createdUser.name,
         phone: createdUser.phone,
+        fullName: createdUser.fullName,
       );
+
+      // Update notification token
+      await NotificationService.updateToken();
 
       emit(AuthAuthenticated(role: createdUser.role, uid: createdUser.id!));
     } catch (e) {

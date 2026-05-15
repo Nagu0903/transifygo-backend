@@ -7,6 +7,7 @@ import 'core/localization/language_provider.dart';
 import 'features/auth/presentation/screens/splash_screen.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/load_owner/presentation/bloc/load_bloc.dart';
+import 'core/services/notification_service.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -16,6 +17,9 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Initialize Notifications
+  await NotificationService.initialize();
 
   runApp(
     MultiProvider(
@@ -40,7 +44,7 @@ class TransifyApp extends StatelessWidget {
       child: Consumer<LanguageProvider>(
         builder: (context, langProvider, child) {
           return MaterialApp(
-            title: 'TRANSIFY',
+            title: 'TransifyGo',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             locale: langProvider.currentLocale,

@@ -37,6 +37,11 @@ class DeleteLoadRequested extends LoadEvent {
   DeleteLoadRequested(this.loadId);
 }
 
+class CancelLoadRequested extends LoadEvent {
+  final String loadId;
+  CancelLoadRequested(this.loadId);
+}
+
 // States
 abstract class LoadState extends Equatable {
   @override
@@ -66,6 +71,7 @@ class LoadBloc extends Bloc<LoadEvent, LoadState> {
     on<FetchDriverLoadsRequested>(_onFetchDriverLoadsRequested);
     on<UpdateLoadStatusRequested>(_onUpdateLoadStatusRequested);
     on<DeleteLoadRequested>(_onDeleteLoadRequested);
+    on<CancelLoadRequested>(_onCancelLoadRequested);
   }
 
   Future<void> _onPostLoadRequested(PostLoadRequested event, Emitter<LoadState> emit) async {
@@ -75,8 +81,6 @@ class LoadBloc extends Bloc<LoadEvent, LoadState> {
       emit(LoadSuccess('Load posted successfully'));
     } catch (e) {
       emit(LoadError(e.toString()));
-    } finally {
-      if (state is LoadLoading) emit(LoadInitial());
     }
   }
 
@@ -87,8 +91,6 @@ class LoadBloc extends Bloc<LoadEvent, LoadState> {
       emit(LoadSuccess('Loads fetched successfully', loads: loads));
     } catch (e) {
       emit(LoadError(e.toString()));
-    } finally {
-      if (state is LoadLoading) emit(LoadInitial());
     }
   }
 
@@ -99,8 +101,6 @@ class LoadBloc extends Bloc<LoadEvent, LoadState> {
       emit(LoadSuccess('Your loads fetched', loads: loads));
     } catch (e) {
       emit(LoadError(e.toString()));
-    } finally {
-      if (state is LoadLoading) emit(LoadInitial());
     }
   }
 
@@ -111,8 +111,6 @@ class LoadBloc extends Bloc<LoadEvent, LoadState> {
       emit(LoadSuccess('Accepted loads fetched', loads: loads));
     } catch (e) {
       emit(LoadError(e.toString()));
-    } finally {
-      if (state is LoadLoading) emit(LoadInitial());
     }
   }
 
@@ -123,8 +121,6 @@ class LoadBloc extends Bloc<LoadEvent, LoadState> {
       emit(LoadSuccess('Load ${event.status} successfully'));
     } catch (e) {
       emit(LoadError(e.toString()));
-    } finally {
-      if (state is LoadLoading) emit(LoadInitial());
     }
   }
 
@@ -135,8 +131,16 @@ class LoadBloc extends Bloc<LoadEvent, LoadState> {
       emit(LoadSuccess('Load deleted successfully'));
     } catch (e) {
       emit(LoadError(e.toString()));
-    } finally {
-      if (state is LoadLoading) emit(LoadInitial());
+    }
+  }
+
+  Future<void> _onCancelLoadRequested(CancelLoadRequested event, Emitter<LoadState> emit) async {
+    emit(LoadLoading());
+    try {
+      await _loadRepository.cancelLoad(event.loadId);
+      emit(LoadSuccess('Load cancelled successfully'));
+    } catch (e) {
+      emit(LoadError(e.toString()));
     }
   }
 }

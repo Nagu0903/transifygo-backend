@@ -111,6 +111,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _buildStatCard('Pending Loads', _stats['pendingLoads']?.toString() ?? '0', Colors.orange, Icons.pending_actions),
         _buildStatCard('Accepted', _stats['acceptedLoads']?.toString() ?? '0', Colors.green, Icons.check_circle_outline),
         _buildStatCard('Completed', _stats['completedLoads']?.toString() ?? '0', Colors.indigo, Icons.task_alt),
+        _buildStatCard('Cancelled', _stats['cancelledLoads']?.toString() ?? '0', Colors.red, Icons.cancel_outlined),
       ],
     );
   }
@@ -223,7 +224,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               backgroundColor: isBlocked ? Colors.red.withValues(alpha: 0.1) : Colors.blue.withValues(alpha: 0.1),
               child: Icon(Icons.person, color: isBlocked ? Colors.red : Colors.blue),
             ),
-            title: Text(data['name'] ?? 'Unknown', style: TextStyle(fontWeight: FontWeight.bold, color: isBlocked ? Colors.grey : Colors.black)),
+            title: Text(data['fullName'] ?? data['name'] ?? 'Unknown', style: TextStyle(fontWeight: FontWeight.bold, color: isBlocked ? Colors.grey : Colors.black)),
             subtitle: Text('${data['role']} • ${data['phone']}'),
             trailing: IconButton(
               icon: Icon(isBlocked ? Icons.lock_open : Icons.block, color: isBlocked ? Colors.green : Colors.red),
@@ -265,6 +266,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       case 'pending': return Colors.orange;
       case 'accepted': return Colors.blue;
       case 'completed': return Colors.green;
+      case 'cancelled': return Colors.red;
       default: return Colors.grey;
     }
   }

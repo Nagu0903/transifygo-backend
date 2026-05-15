@@ -8,8 +8,10 @@ import 'package:transify_app/core/constants/app_colors.dart';
 import 'package:transify_app/core/localization/language_provider.dart';
 import 'package:transify_app/core/services/session_service.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart' as geo;
+import 'package:geocoding/geocoding.dart';
 import 'package:transify_app/features/load_owner/presentation/bloc/load_bloc.dart';
+import 'package:transify_app/core/utils/location_utils.dart';
+import 'package:transify_app/core/services/distance_matrix_service.dart';
 import 'dart:math' show cos, sqrt, asin;
 import 'package:transify_app/core/utils/snackbar_utils.dart';
 
@@ -113,15 +115,15 @@ class _PostLoadTabState extends State<PostLoadTab> {
         String state = "";
 
         try {
-          List<geo.Placemark> placemarks = await geo.placemarkFromCoordinates(
+          List<Placemark> placemarks = await placemarkFromCoordinates(
             position.latitude, 
             position.longitude
           );
           if (placemarks.isNotEmpty) {
-            geo.Placemark place = placemarks[0];
-            address = "${place.name}, ${place.locality}, ${place.subAdministrativeArea}, ${place.administrativeArea}";
-            district = place.subAdministrativeArea ?? "";
-            state = place.administrativeArea ?? "";
+            address = LocationUtils.formatPlacemark(placemarks[0]);
+            final info = LocationUtils.getDistrictAndState(placemarks[0]);
+            district = info['district']!;
+            state = info['state']!;
           }
         } catch (e) {
           debugPrint('Reverse geocoding error: $e');
@@ -154,7 +156,7 @@ class _PostLoadTabState extends State<PostLoadTab> {
     }
   }
 
-  void _calculateDistance() {
+  Future<void> _calculateDistance() async {
     if (_fromPrediction != null && _toPrediction != null) {
       try {
         double lat1 = double.parse(_fromPrediction!.lat!);
@@ -162,6 +164,17 @@ class _PostLoadTabState extends State<PostLoadTab> {
         double lat2 = double.parse(_toPrediction!.lat!);
         double lon2 = double.parse(_toPrediction!.lng!);
 
+        // Try getting real road distance first
+        final roadData = await DistanceMatrixService.getDistance(lat1, lon1, lat2, lon2);
+        
+        if (roadData != null && mounted) {
+          setState(() {
+            _distance = roadData['distance_value'];
+          });
+          return;
+        }
+
+        // Fallback to Haversine if API fails or quota exceeded
         var p = 0.017453292519943295;
         var c = cos;
         var a = 0.5 - c((lat2 - lat1) * p) / 2 +
@@ -169,8 +182,8 @@ class _PostLoadTabState extends State<PostLoadTab> {
                 (1 - c((lon2 - lon1) * p)) / 2;
         
         setState(() {
-          _distance = 12742 * asin(sqrt(a));
-          _distance = _distance * 1.2; // Approximation for road turns
+          double haversine = 12742 * asin(sqrt(a));
+          _distance = haversine * 1.25; // Professional approximation for road distance
         });
       } catch (e) {
         debugPrint('Distance calculation error: $e');
@@ -388,7 +401,7 @@ class _PostLoadTabState extends State<PostLoadTab> {
             : null,
       ),
       focusNode: focusNode,
-      debounceTime: 800,
+      debounceTime: 600,
       countries: ["in"],
       itemClick: (Prediction prediction) async {
         controller.text = prediction.description ?? "";
@@ -399,22 +412,22 @@ class _PostLoadTabState extends State<PostLoadTab> {
         // Check cache first
         if (!_locationCache.containsKey(desc)) {
           try {
-            List<geo.Location> locations = await geo.locationFromAddress(desc);
+            List<Location> locations = await locationFromAddress(desc);
             if (locations.isNotEmpty) {
               prediction.lat = locations[0].latitude.toString();
               prediction.lng = locations[0].longitude.toString();
               
               // Get District and State
-              List<geo.Placemark> placemarks = await geo.placemarkFromCoordinates(
+              List<Placemark> placemarks = await placemarkFromCoordinates(
                 locations[0].latitude, 
                 locations[0].longitude
               );
               
               if (placemarks.isNotEmpty) {
-                final p = placemarks[0];
+                final info = LocationUtils.getDistrictAndState(placemarks[0]);
                 _locationCache[desc] = {
-                  'district': p.subAdministrativeArea ?? p.locality ?? "",
-                  'state': p.administrativeArea ?? "",
+                  'district': info['district'],
+                  'state': info['state'],
                   'lat': locations[0].latitude,
                   'lng': locations[0].longitude,
                 };
@@ -457,21 +470,21 @@ class _PostLoadTabState extends State<PostLoadTab> {
 
     setState(() => _isGettingLocation = true);
     try {
-      List<geo.Location> locations = await geo.locationFromAddress(query);
+      List<Location> locations = await locationFromAddress(query);
       if (locations.isNotEmpty) {
         final loc = locations[0];
         
         // Get details
-        List<geo.Placemark> placemarks = await geo.placemarkFromCoordinates(loc.latitude, loc.longitude);
+        List<Placemark> placemarks = await placemarkFromCoordinates(loc.latitude, loc.longitude);
         String fullAddress = query;
         String district = "";
         String state = "";
 
         if (placemarks.isNotEmpty) {
-          final p = placemarks[0];
-          fullAddress = "${p.name}, ${p.locality}, ${p.subAdministrativeArea}, ${p.administrativeArea}";
-          district = p.subAdministrativeArea ?? p.locality ?? "";
-          state = p.administrativeArea ?? "";
+          fullAddress = LocationUtils.formatPlacemark(placemarks[0]);
+          final info = LocationUtils.getDistrictAndState(placemarks[0]);
+          district = info['district']!;
+          state = info['state']!;
         }
 
         final prediction = Prediction(

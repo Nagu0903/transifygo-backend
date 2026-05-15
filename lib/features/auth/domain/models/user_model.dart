@@ -12,6 +12,7 @@ class UserModel {
   final String? truckType;
   final String? truckNumber;
   final String? city;
+  final String? fullName;
 
   UserModel({
     this.id,
@@ -25,6 +26,7 @@ class UserModel {
     this.truckType,
     this.truckNumber,
     this.city,
+    this.fullName,
   });
 
   factory UserModel.fromMap(Map<String, dynamic> map, String docId) {
@@ -40,6 +42,7 @@ class UserModel {
       truckType: map['truckType'],
       truckNumber: map['truckNumber'],
       city: map['city'],
+      fullName: map['fullName'] ?? map['name'], // Fallback to name
     );
   }
 
@@ -55,6 +58,7 @@ class UserModel {
       'truckType': truckType,
       'truckNumber': truckNumber,
       'city': city,
+      'fullName': fullName ?? name,
     };
   }
 }

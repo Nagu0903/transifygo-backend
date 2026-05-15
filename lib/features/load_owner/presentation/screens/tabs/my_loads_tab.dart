@@ -42,7 +42,7 @@ class _MyLoadsTabState extends State<MyLoadsTab> {
     final lang = Provider.of<LanguageProvider>(context);
 
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: Text(lang.translate('my_loads')),
@@ -51,6 +51,7 @@ class _MyLoadsTabState extends State<MyLoadsTab> {
               Tab(text: lang.translate('pending')),
               Tab(text: lang.translate('accepted')),
               Tab(text: lang.translate('completed')),
+              Tab(text: 'Cancelled'),
             ],
             labelColor: AppColors.primaryBlue,
             indicatorColor: AppColors.primaryBlue,
@@ -58,23 +59,35 @@ class _MyLoadsTabState extends State<MyLoadsTab> {
         ),
         body: _userId == null 
           ? const Center(child: CircularProgressIndicator())
-          : BlocBuilder<LoadBloc, LoadState>(
-              builder: (context, state) {
-                if (state is LoadLoading) return const Center(child: CircularProgressIndicator());
-                
-                List<Map<String, dynamic>> allLoads = [];
-                if (state is LoadSuccess && state.loads != null) {
-                  allLoads = state.loads!;
+          : BlocListener<LoadBloc, LoadState>(
+              listener: (context, state) {
+                if (state is LoadSuccess) {
+                  final msg = state.message.toLowerCase();
+                  if (msg.contains('cancelled') || msg.contains('completed') || msg.contains('accepted')) {
+                    debugPrint('[UI] Status update detected, refreshing list...');
+                    _fetchLoads();
+                  }
                 }
-
-                return TabBarView(
-                  children: [
-                    _buildStatusList(context, allLoads, 'pending'),
-                    _buildStatusList(context, allLoads, 'accepted'),
-                    _buildStatusList(context, allLoads, 'completed'),
-                  ],
-                );
               },
+              child: BlocBuilder<LoadBloc, LoadState>(
+                builder: (context, state) {
+                  if (state is LoadLoading) return const Center(child: CircularProgressIndicator());
+                  
+                  List<Map<String, dynamic>> allLoads = [];
+                  if (state is LoadSuccess && state.loads != null) {
+                    allLoads = state.loads!;
+                  }
+
+                  return TabBarView(
+                    children: [
+                      _buildStatusList(context, allLoads, 'pending'),
+                      _buildStatusList(context, allLoads, 'accepted'),
+                      _buildStatusList(context, allLoads, 'completed'),
+                      _buildStatusList(context, allLoads, 'cancelled'),
+                    ],
+                  );
+                },
+              ),
             ),
       ),
     );
@@ -179,7 +192,7 @@ class _MyLoadsTabState extends State<MyLoadsTab> {
             if (data['status'] == 'pending') ...[
               const Divider(height: 24),
               TextButton.icon(
-                onPressed: () => _deleteLoad(context, loadId),
+                onPressed: () => _cancelLoad(context, loadId),
                 icon: const Icon(Icons.cancel_outlined, color: Colors.red),
                 label: const Text('Cancel Load', style: TextStyle(color: Colors.red)),
               ),
@@ -196,6 +209,7 @@ class _MyLoadsTabState extends State<MyLoadsTab> {
       case 'pending': color = Colors.orange; break;
       case 'accepted': color = Colors.blue; break;
       case 'completed': color = Colors.green; break;
+      case 'cancelled': color = Colors.red; break;
       default: color = Colors.grey;
     }
     return Container(
@@ -223,21 +237,21 @@ class _MyLoadsTabState extends State<MyLoadsTab> {
     Future.delayed(const Duration(milliseconds: 500), _fetchLoads);
   }
 
-  void _deleteLoad(BuildContext context, String loadId) {
+  void _cancelLoad(BuildContext context, String loadId) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Cancel Load'),
-        content: const Text('Are you sure you want to cancel this load?'),
+        content: const Text('Are you sure you want to cancel this load? It will be moved to the Cancelled tab.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('No')),
           TextButton(
             onPressed: () {
-              context.read<LoadBloc>().add(DeleteLoadRequested(loadId));
+              context.read<LoadBloc>().add(CancelLoadRequested(loadId));
               Navigator.pop(ctx);
               _fetchLoads();
             },
-            child: const Text('Yes, Cancel', style: TextStyle(color: Colors.red)),
+            child: const Text('Yes, Cancel', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
