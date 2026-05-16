@@ -63,7 +63,7 @@ class _MyLoadsTabState extends State<MyLoadsTab> {
               listener: (context, state) {
                 if (state is LoadSuccess) {
                   final msg = state.message.toLowerCase();
-                  if (msg.contains('cancelled') || msg.contains('completed') || msg.contains('accepted')) {
+                  if (msg.contains('cancelled') || msg.contains('completed') || msg.contains('accepted') || msg.contains('success')) {
                     debugPrint('[UI] Status update detected, refreshing list...');
                     _fetchLoads();
                   }

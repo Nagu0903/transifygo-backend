@@ -28,7 +28,18 @@ class _AcceptedLoadsTabState extends State<AcceptedLoadsTab> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<LoadBloc, LoadState>(
+    return BlocListener<LoadBloc, LoadState>(
+      listener: (context, state) {
+        if (state is LoadSuccess) {
+          final msg = state.message.toLowerCase();
+          // Listen for any cancellation or success event to trigger a refresh
+          if (msg.contains('success') || msg.contains('cancelled')) {
+             debugPrint('[DRIVER] List sync detected, refreshing accepted loads...');
+             _fetchLoads();
+          }
+        }
+      },
+      child: BlocBuilder<LoadBloc, LoadState>(
       builder: (context, state) {
         if (state is LoadLoading) {
           return const Center(child: CircularProgressIndicator());
@@ -68,6 +79,7 @@ class _AcceptedLoadsTabState extends State<AcceptedLoadsTab> {
           ),
         );
       },
+    ),
     );
   }
 

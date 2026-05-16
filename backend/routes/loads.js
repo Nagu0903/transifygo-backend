@@ -178,7 +178,11 @@ router.put('/cancel/:loadId', checkDB, async (req, res) => {
     load.status = 'cancelled';
     load.isActive = false;
     load.visibleToDrivers = false;
+    load.cancelledBy = 'owner';
+    load.cancelledAt = new Date();
     await load.save();
+
+    console.log(`[CANCEL] Load ${loadId} marked as cancelled by Owner at ${load.cancelledAt}. Visibility revoked.`);
 
     console.log(`[CANCEL] Load ${loadId} marked as cancelled, inactive, and hidden.`);
 

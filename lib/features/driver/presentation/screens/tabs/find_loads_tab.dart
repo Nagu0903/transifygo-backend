@@ -24,8 +24,8 @@ class _FindLoadsTabState extends State<FindLoadsTab> {
   void initState() {
     super.initState();
     _fetchPending();
-    // Auto refresh every 20 seconds for real-time feel
-    _refreshTimer = Timer.periodic(const Duration(seconds: 20), (timer) => _fetchPending());
+    // Auto refresh every 15 seconds for real-time feel
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (timer) => _fetchPending());
   }
 
   void _fetchPending() {

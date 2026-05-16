@@ -30,6 +30,8 @@ const loadSchema = new mongoose.Schema({
   driverPhone: { type: String },
   isActive: { type: Boolean, default: true },
   visibleToDrivers: { type: Boolean, default: true },
+  cancelledBy: { type: String }, // 'owner', 'driver', 'admin'
+  cancelledAt: { type: Date },
   createdAt: { type: Date, default: Date.now }
 });
 

@@ -138,7 +138,7 @@ class LoadBloc extends Bloc<LoadEvent, LoadState> {
     emit(LoadLoading());
     try {
       await _loadRepository.cancelLoad(event.loadId);
-      emit(LoadSuccess('Load cancelled successfully'));
+      emit(LoadSuccess('LOAD_CANCELLED_SUCCESS'));
     } catch (e) {
       emit(LoadError(e.toString()));
     }
