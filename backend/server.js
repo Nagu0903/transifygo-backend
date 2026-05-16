@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
 const loadRoutes = require('./routes/loads');
+const adminRoutes = require('./routes/admin');
 const { router: notificationRoutes } = require('./routes/notifications');
 
 const app = express();
