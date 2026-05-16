@@ -4,9 +4,9 @@ const cors = require('cors');
 require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
+const { router: notificationRoutes } = require('./routes/notifications'); // Import notifications first
 const loadRoutes = require('./routes/loads');
 const adminRoutes = require('./routes/admin');
-const { router: notificationRoutes } = require('./routes/notifications');
 
 const app = express();
 
