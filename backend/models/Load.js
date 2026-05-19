@@ -32,6 +32,18 @@ const loadSchema = new mongoose.Schema({
   visibleToDrivers: { type: Boolean, default: true },
   cancelledBy: { type: String }, // 'owner', 'driver', 'admin'
   cancelledAt: { type: Date },
+  deliveryPhotoUrl: { type: String },
+  invoicePhotoUrl: { type: String },
+  unloadingProofUrl: { type: String },
+  completedAt: { type: Date },
+  paymentStatus: { type: String, enum: ['pending', 'partial', 'paid'], default: 'pending' },
+  totalAmount: { type: Number, default: null },
+  paidAmount: { type: Number, default: 0 },
+  remainingAmount: { type: Number, default: null },
+  paymentMethod: { type: String, enum: ['cash', 'upi', 'bank_transfer', ''], default: '' },
+  paymentNotes: { type: String, default: '' },
+  paymentUpdatedAt: { type: Date },
+  paymentScreenshotUrl: { type: String },
   createdAt: { type: Date, default: Date.now }
 });
 

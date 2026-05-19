@@ -82,7 +82,7 @@ router.get('/my-loads/:userId', checkDB, async (req, res) => {
 // PUT /api/loads/status/:loadId
 router.put('/status/:loadId', checkDB, async (req, res) => {
   try {
-    const { status, driverId, driverName, driverPhone } = req.body;
+    const { status, driverId, driverName, driverPhone, deliveryPhotoUrl, invoicePhotoUrl, unloadingProofUrl } = req.body;
     const loadId = req.params.loadId;
 
     const loadCheck = await Load.findById(loadId);
@@ -94,6 +94,27 @@ router.put('/status/:loadId', checkDB, async (req, res) => {
     if (driverId) updateData.driverId = driverId;
     if (driverName) updateData.driverName = driverName;
     if (driverPhone) updateData.driverPhone = driverPhone;
+
+    // URL Validation Helper
+    const isValidFirebaseUrl = (url) => typeof url === 'string' && url.startsWith('https://firebasestorage.googleapis.com/');
+
+    if (deliveryPhotoUrl) {
+      if (!isValidFirebaseUrl(deliveryPhotoUrl)) return res.status(400).json({ success: false, message: 'Invalid delivery photo URL' });
+      updateData.deliveryPhotoUrl = deliveryPhotoUrl;
+    }
+    if (invoicePhotoUrl) {
+      if (!isValidFirebaseUrl(invoicePhotoUrl)) return res.status(400).json({ success: false, message: 'Invalid invoice photo URL' });
+      updateData.invoicePhotoUrl = invoicePhotoUrl;
+    }
+    if (unloadingProofUrl) {
+      if (!isValidFirebaseUrl(unloadingProofUrl)) return res.status(400).json({ success: false, message: 'Invalid unloading proof URL' });
+      updateData.unloadingProofUrl = unloadingProofUrl;
+    }
+
+    if (status === 'completed') {
+      updateData.completedAt = new Date();
+      updateData.paymentStatus = 'pending';
+    }
 
     const load = await Load.findByIdAndUpdate(loadId, updateData, { new: true });
     
@@ -116,7 +137,10 @@ router.put('/status/:loadId', checkDB, async (req, res) => {
         'Load Delivered! 🎉', 
         `Your load from ${load.fromLocation} to ${load.toLocation} has been completed.`, 
         'load_completed', 
-        { loadId: load._id }
+        { 
+          loadId: load._id.toString(),
+          loadData: JSON.stringify(load)
+        }
       );
     }
 
@@ -125,6 +149,68 @@ router.put('/status/:loadId', checkDB, async (req, res) => {
   } catch (err) {
     console.error('Update Status Error:', err);
     res.status(500).json({ success: false, message: 'Failed to update load status' });
+  }
+});
+
+// 3.5. Update Payment Status (For Owners)
+// PUT /api/loads/:id/payment
+router.put('/:id/payment', checkDB, async (req, res) => {
+  try {
+    const loadId = req.params.id;
+    const { totalAmount, paidAmount, paymentMethod, paymentNotes, paymentScreenshotUrl } = req.body;
+
+    const load = await Load.findById(loadId);
+    if (!load) return res.status(404).json({ success: false, message: 'Load not found' });
+    if (load.status !== 'completed') {
+      return res.status(400).json({ success: false, message: 'Payment can only be updated for completed loads' });
+    }
+
+    // Safely update values
+    if (totalAmount !== undefined) load.totalAmount = Number(totalAmount);
+    if (paidAmount !== undefined) load.paidAmount = Number(paidAmount);
+    if (paymentMethod !== undefined) load.paymentMethod = paymentMethod;
+    if (paymentNotes !== undefined) load.paymentNotes = paymentNotes;
+    if (paymentScreenshotUrl !== undefined) load.paymentScreenshotUrl = paymentScreenshotUrl;
+
+    // Auto-calculate remaining amount and status
+    const currentTotal = load.totalAmount || 0;
+    const currentPaid = load.paidAmount || 0;
+    
+    if (currentTotal > 0) {
+      load.remainingAmount = Math.max(0, currentTotal - currentPaid);
+      
+      if (currentPaid >= currentTotal) {
+        load.paymentStatus = 'paid';
+      } else if (currentPaid > 0) {
+        load.paymentStatus = 'partial';
+      } else {
+        load.paymentStatus = 'pending';
+      }
+    }
+
+    load.paymentUpdatedAt = new Date();
+
+    await load.save();
+
+    // Notify Driver
+    if (load.driverId) {
+      const statusText = load.paymentStatus === 'paid' ? 'Full Payment Received! 💰' : 'Partial Payment Updated! 💵';
+      const bodyText = `Owner has updated the payment for load ${load.fromLocation} to ${load.toLocation}. Paid: ₹${load.paidAmount}.`;
+      
+      sendPushNotification(
+        load.driverId,
+        statusText,
+        bodyText,
+        'payment_updated',
+        { loadId: load._id.toString() }
+      );
+    }
+
+    console.log(`✅ Payment updated for Load ${loadId}: ${load.paymentStatus}`);
+    res.json({ success: true, message: 'Payment updated successfully', load });
+  } catch (err) {
+    console.error('Update Payment Error:', err);
+    res.status(500).json({ success: false, message: 'Failed to update payment' });
   }
 });
 
