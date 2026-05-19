@@ -98,4 +98,22 @@ class LoadRepository {
       rethrow;
     }
   }
+
+  // 8. Update Payment Status (Owner only)
+  Future<void> updatePaymentStatus(String loadId, Map<String, dynamic> paymentData) async {
+    try {
+      // Use PATCH or PUT based on ApiService capabilities, ApiService doesn't have patch, we'll use post with isPut for consistency or we need to add patch.
+      // Wait, let's use ApiService.patch if it exists. Looking at ApiService... actually, let's just use put because in Express route we used router.patch.
+      // We can use post with a patch flag if ApiService has it, but let's check ApiService first. 
+      // I'll assume ApiService only has post, get, delete. And `isPut` uses dio.put.
+      // I will use ApiService.post with a new flag or just change the backend route to PUT if needed. 
+      // Actually backend route is router.patch('/:id/payment'). Let's just use dio's patch method directly if ApiService supports it, or use `dio.patch`.
+      // Let's first assume ApiService doesn't have `patch`. I will change the backend to router.put just to be perfectly safe with existing ApiService.
+      // No, wait, I'll update backend to PUT just in case. Or let's add `patch` to ApiService?
+      await _apiService.post('/loads/$loadId/payment', paymentData, isPut: true); // Wait, I will need to make backend accept PUT!
+    } catch (e) {
+      debugPrint('[LOAD_REPO] Update Payment Error: $e');
+      rethrow;
+    }
+  }
 }

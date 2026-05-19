@@ -157,7 +157,7 @@ router.put('/status/:loadId', checkDB, async (req, res) => {
 router.put('/:id/payment', checkDB, async (req, res) => {
   try {
     const loadId = req.params.id;
-    const { totalAmount, paidAmount, paymentMethod, paymentNotes, paymentScreenshotUrl } = req.body;
+    const { totalAmount, paidAmount, enteredAmount, paymentMethod, paymentNotes, paymentScreenshotUrl } = req.body;
 
     const load = await Load.findById(loadId);
     if (!load) return res.status(404).json({ success: false, message: 'Load not found' });
@@ -165,15 +165,46 @@ router.put('/:id/payment', checkDB, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Payment can only be updated for completed loads' });
     }
 
-    // Safely update values
     if (totalAmount !== undefined) load.totalAmount = Number(totalAmount);
-    if (paidAmount !== undefined) load.paidAmount = Number(paidAmount);
+    const currentTotal = load.totalAmount || 0;
+    
+    let isIncremental = false;
+    let chunk = 0;
+
+    if (enteredAmount !== undefined) {
+      isIncremental = true;
+      chunk = Number(enteredAmount) || 0;
+      const oldPaid = load.paidAmount || 0;
+      const newPaid = oldPaid + chunk;
+      
+      if (currentTotal > 0 && newPaid > currentTotal) {
+        return res.status(400).json({ success: false, message: `Payment of ₹${chunk} exceeds the remaining balance of ₹${currentTotal - oldPaid}` });
+      }
+      
+      load.paidAmount = newPaid;
+      
+      // Push to history
+      if (chunk > 0) {
+        if (!load.paymentHistory) load.paymentHistory = [];
+        load.paymentHistory.push({
+          amount: chunk,
+          date: new Date(),
+          method: paymentMethod || load.paymentMethod,
+          notes: paymentNotes || load.paymentNotes,
+          screenshotUrl: paymentScreenshotUrl
+        });
+      }
+    } else if (paidAmount !== undefined) {
+      // Legacy support for absolute overwrite
+      load.paidAmount = Number(paidAmount);
+    }
+
+    // Safely update legacy fields for last payment info
     if (paymentMethod !== undefined) load.paymentMethod = paymentMethod;
     if (paymentNotes !== undefined) load.paymentNotes = paymentNotes;
     if (paymentScreenshotUrl !== undefined) load.paymentScreenshotUrl = paymentScreenshotUrl;
 
     // Auto-calculate remaining amount and status
-    const currentTotal = load.totalAmount || 0;
     const currentPaid = load.paidAmount || 0;
     
     if (currentTotal > 0) {

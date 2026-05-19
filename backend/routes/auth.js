@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const admin = require('firebase-admin');
 
 // Middleware to check DB connection
 const checkDB = (req, res, next) => {
@@ -186,6 +187,34 @@ router.post('/reset-password', checkDB, async (req, res) => {
   } catch (err) {
     console.error('Reset Password Error:', err);
     res.status(500).json({ success: false, message: 'Failed to reset password', error: err.message });
+  }
+});
+
+// Firebase Custom Token API
+router.post('/firebase-token', checkDB, async (req, res) => {
+  console.log('--- Firebase Custom Token Request Started ---');
+  try {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'userId is required' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Mint custom Firebase token
+    const customToken = await admin.auth().createCustomToken(user._id.toString());
+    
+    res.json({
+      success: true,
+      firebaseToken: customToken
+    });
+
+  } catch (err) {
+    console.error('Firebase Token Error:', err);
+    res.status(500).json({ success: false, message: 'Failed to generate Firebase token', error: err.message });
   }
 });
 

@@ -59,6 +59,7 @@ dependencies:
   flutter_native_splash: ^2.4.7
   firebase_messaging: ^15.2.10
   flutter_local_notifications: ^21.0.0
+  image_picker: ^1.2.2
 
 
 
@@ -115,7 +116,9 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/images/app_icon.png"
+  image_path: "assets/logo/logo.png"
+  adaptive_icon_background: "#ffffff"
+  adaptive_icon_foreground: "assets/logo/logo.png"
   min_sdk_android: 21
 
 flutter_native_splash:

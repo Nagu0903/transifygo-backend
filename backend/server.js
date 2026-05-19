@@ -46,13 +46,27 @@ const MONGODB_URI = process.env.MONGODB_URI;
 
 mongoose.connect(MONGODB_URI, {
   serverSelectionTimeoutMS: 5000, // Fail fast if no connection
+  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+  maxPoolSize: 50, // Maintain up to 50 socket connections
+  family: 4, // Use IPv4, skip trying IPv6
 })
   .then(() => {
-    console.log(`MongoDB Connected Successfully to database: ${mongoose.connection.name}`);
+    // The exact string requested by the user
+    console.log('MongoDB Connected Successfully');
   })
   .catch(err => {
     console.error('MongoDB Connection Failed:', err.message);
   });
+
+// Auto-reconnect and error handling
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB Runtime Error:', err.message);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.warn('MongoDB Disconnected! Mongoose will automatically attempt to reconnect.');
+});
+
 
 // Error handling middleware
 app.use((err, req, res, next) => {

@@ -22,7 +22,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.transify.logisticsapp"
+        applicationId = "com.transify.app"
         minSdk = flutter.minSdkVersion
         targetSdk = 35
         versionCode = flutter.versionCode

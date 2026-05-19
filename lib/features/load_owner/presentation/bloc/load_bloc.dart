@@ -42,6 +42,12 @@ class CancelLoadRequested extends LoadEvent {
   CancelLoadRequested(this.loadId);
 }
 
+class UpdatePaymentStatusRequested extends LoadEvent {
+  final String loadId;
+  final Map<String, dynamic> paymentData;
+  UpdatePaymentStatusRequested(this.loadId, this.paymentData);
+}
+
 // States
 abstract class LoadState extends Equatable {
   @override
@@ -72,6 +78,7 @@ class LoadBloc extends Bloc<LoadEvent, LoadState> {
     on<UpdateLoadStatusRequested>(_onUpdateLoadStatusRequested);
     on<DeleteLoadRequested>(_onDeleteLoadRequested);
     on<CancelLoadRequested>(_onCancelLoadRequested);
+    on<UpdatePaymentStatusRequested>(_onUpdatePaymentStatusRequested);
   }
 
   Future<void> _onPostLoadRequested(PostLoadRequested event, Emitter<LoadState> emit) async {
@@ -139,6 +146,16 @@ class LoadBloc extends Bloc<LoadEvent, LoadState> {
     try {
       await _loadRepository.cancelLoad(event.loadId);
       emit(LoadSuccess('LOAD_CANCELLED_SUCCESS'));
+    } catch (e) {
+      emit(LoadError(e.toString()));
+    }
+  }
+
+  Future<void> _onUpdatePaymentStatusRequested(UpdatePaymentStatusRequested event, Emitter<LoadState> emit) async {
+    emit(LoadLoading());
+    try {
+      await _loadRepository.updatePaymentStatus(event.loadId, event.paymentData);
+      emit(LoadSuccess('Payment updated successfully'));
     } catch (e) {
       emit(LoadError(e.toString()));
     }

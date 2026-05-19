@@ -5,6 +5,7 @@ import 'package:transify_app/core/constants/app_colors.dart';
 import 'package:transify_app/core/localization/language_provider.dart';
 import 'tabs/find_loads_tab.dart';
 import 'tabs/accepted_loads_tab.dart';
+import 'tabs/completed_loads_tab.dart';
 
 class FindLoadsScreen extends StatefulWidget {
   const FindLoadsScreen({super.key});
@@ -19,7 +20,7 @@ class _FindLoadsScreenState extends State<FindLoadsScreen> {
     final lang = Provider.of<LanguageProvider>(context);
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: Text(lang.translate('app_name')),
@@ -36,6 +37,7 @@ class _FindLoadsScreenState extends State<FindLoadsScreen> {
             tabs: [
               Tab(text: lang.translate('find_loads')),
               Tab(text: lang.translate('accepted')),
+              const Tab(text: 'Completed'),
             ],
           ),
         ),
@@ -43,6 +45,7 @@ class _FindLoadsScreenState extends State<FindLoadsScreen> {
           children: [
             FindLoadsTab(),
             AcceptedLoadsTab(),
+            CompletedLoadsTab(),
           ],
         ),
       ),

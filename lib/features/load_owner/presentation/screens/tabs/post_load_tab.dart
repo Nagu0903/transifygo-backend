@@ -393,6 +393,7 @@ class _PostLoadTabState extends State<PostLoadTab> {
     return GooglePlaceAutoCompleteTextField(
       textEditingController: controller,
       googleAPIKey: _googleApiKey,
+      showError: false,
       inputDecoration: InputDecoration(
         labelText: lang.translate(labelKey),
         prefixIcon: const Icon(Icons.location_on, color: AppColors.primaryOrange),

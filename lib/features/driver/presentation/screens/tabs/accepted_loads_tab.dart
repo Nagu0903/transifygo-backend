@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:transify_app/core/constants/app_colors.dart';
 import 'package:transify_app/core/services/session_service.dart';
 import 'package:transify_app/features/load_owner/presentation/bloc/load_bloc.dart';
+import 'package:transify_app/features/driver/presentation/screens/tabs/complete_load_sheet.dart' as transify_complete_sheet;
 
 class AcceptedLoadsTab extends StatefulWidget {
   const AcceptedLoadsTab({super.key});
@@ -47,7 +48,7 @@ class _AcceptedLoadsTabState extends State<AcceptedLoadsTab> {
 
         List<Map<String, dynamic>> loads = [];
         if (state is LoadSuccess && state.loads != null) {
-          loads = state.loads!;
+          loads = state.loads!.where((load) => load['status'] != 'completed' && load['status'] != 'cancelled').toList();
         }
 
         if (loads.isEmpty) {
@@ -81,6 +82,20 @@ class _AcceptedLoadsTabState extends State<AcceptedLoadsTab> {
       },
     ),
     );
+  }
+
+  void _showCompleteLoadSheet(BuildContext context, String loadId) async {
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => transify_complete_sheet.CompleteLoadSheet(loadId: loadId),
+    );
+
+    if (result == true) {
+      // Refresh the list if completion was successful
+      _fetchLoads();
+    }
   }
 
   Widget _buildAcceptedLoadCard(BuildContext context, Map<String, dynamic> data) {
@@ -121,17 +136,34 @@ class _AcceptedLoadsTabState extends State<AcceptedLoadsTab> {
               ],
             ),
             const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => launchUrl(Uri.parse('tel:${data['phone']}')),
-                icon: const Icon(Icons.call),
-                label: const Text('Call Owner to Coordinate'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => launchUrl(Uri.parse('tel:${data['phone']}')),
+                    icon: const Icon(Icons.call, size: 18),
+                    label: const Text('Call Owner'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.green,
+                      side: const BorderSide(color: Colors.green),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showCompleteLoadSheet(context, data['_id']),
+                    icon: const Icon(Icons.check_circle_outline, size: 18),
+                    label: const Text('Complete'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryBlue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

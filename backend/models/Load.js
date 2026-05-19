@@ -43,7 +43,14 @@ const loadSchema = new mongoose.Schema({
   paymentMethod: { type: String, enum: ['cash', 'upi', 'bank_transfer', ''], default: '' },
   paymentNotes: { type: String, default: '' },
   paymentUpdatedAt: { type: Date },
-  paymentScreenshotUrl: { type: String },
+  paymentScreenshotUrl: { type: String, default: null },
+  paymentHistory: [{
+    amount: { type: Number, required: true },
+    date: { type: Date, default: Date.now },
+    method: { type: String, enum: ['cash', 'upi', 'bank_transfer', ''] },
+    notes: { type: String },
+    screenshotUrl: { type: String }
+  }],
   createdAt: { type: Date, default: Date.now }
 });
 

@@ -6,6 +6,9 @@ import 'package:transify_app/core/constants/app_colors.dart';
 import 'package:transify_app/core/localization/language_provider.dart';
 import 'package:transify_app/core/services/session_service.dart';
 import 'package:transify_app/features/load_owner/presentation/bloc/load_bloc.dart';
+import 'package:transify_app/features/load_owner/presentation/screens/completed_load_details_screen.dart' as transify_completed;
+import 'dart:async';
+import 'package:transify_app/core/services/notification_service.dart';
 
 class MyLoadsTab extends StatefulWidget {
   const MyLoadsTab({super.key});
@@ -16,11 +19,25 @@ class MyLoadsTab extends StatefulWidget {
 
 class _MyLoadsTabState extends State<MyLoadsTab> {
   String? _userId;
+  StreamSubscription? _notificationSub;
 
   @override
   void initState() {
     super.initState();
     _loadUserAndFetch();
+    
+    _notificationSub = NotificationService.onNotificationReceived.stream.listen((type) {
+      if (type == 'load_completed' || type == 'load_accepted' || type == 'load_cancelled') {
+        debugPrint('[UI] Auto-refreshing owner loads due to FCM event: $type');
+        _fetchLoads();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadUserAndFetch() async {
@@ -123,81 +140,114 @@ class _MyLoadsTabState extends State<MyLoadsTab> {
   Widget _buildLoadCard(BuildContext context, Map<String, dynamic> data) {
     final loadId = data['id'] ?? data['_id'];
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    '${data['fromLocation']} → ${data['toLocation']}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+    return GestureDetector(
+      onTap: () {
+        if (data['status'] == 'completed') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => transify_completed.CompletedLoadDetailsScreen(loadData: data),
+            ),
+          );
+        }
+      },
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${data['fromLocation']} → ${data['toLocation']}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
                   ),
-                ),
-                _buildStatusBadge(data['status']),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${data['fromDistrict'] ?? 'N/A'}, ${data['fromState'] ?? 'N/A'} → ${data['toDistrict'] ?? 'N/A'}, ${data['toState'] ?? 'N/A'}',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
-            ),
-            const Divider(height: 24),
-            Row(
-              children: [
-                _buildInfoItem(Icons.category, data['material']),
-                _buildInfoItem(Icons.fitness_center, data['weight'] ?? 'N/A'),
-                _buildInfoItem(Icons.route, '${data['distance'] ?? '0'} KM'),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _buildInfoItem(Icons.drive_eta, data['truckType']),
-                _buildInfoItem(Icons.payments, '₹${data['price']}', color: AppColors.primaryBlue),
-              ],
-            ),
-            if (data['status'] == 'accepted' && data['driverPhone'] != null) ...[
+                  _buildStatusBadge(data['status']),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${data['fromDistrict'] ?? 'N/A'}, ${data['fromState'] ?? 'N/A'} → ${data['toDistrict'] ?? 'N/A'}, ${data['toState'] ?? 'N/A'}',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+              ),
               const Divider(height: 24),
               Row(
                 children: [
-                  const Icon(Icons.person, size: 16, color: Colors.grey),
-                  const SizedBox(width: 8),
-                  Text('Driver: ${data['driverName']}', style: const TextStyle(fontWeight: FontWeight.w500)),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => launchUrl(Uri.parse('tel:${data['driverPhone']}')),
-                    icon: const Icon(Icons.call, color: Colors.green),
-                    style: IconButton.styleFrom(backgroundColor: Colors.green.withValues(alpha: 0.1)),
-                  ),
+                  _buildInfoItem(Icons.category, data['material']),
+                  _buildInfoItem(Icons.fitness_center, data['weight'] ?? 'N/A'),
+                  _buildInfoItem(Icons.route, '${data['distance'] ?? '0'} KM'),
                 ],
               ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => _updateStatus(context, loadId, 'completed'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                  child: const Text('Mark as Delivered'),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _buildInfoItem(Icons.drive_eta, data['truckType']),
+                  _buildInfoItem(Icons.payments, '₹${data['price']}', color: AppColors.primaryBlue),
+                ],
+              ),
+              if (data['status'] == 'accepted' && data['driverPhone'] != null) ...[
+                const Divider(height: 24),
+                Row(
+                  children: [
+                    const Icon(Icons.person, size: 16, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Text('Driver: ${data['driverName']}', style: const TextStyle(fontWeight: FontWeight.w500)),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => launchUrl(Uri.parse('tel:${data['driverPhone']}')),
+                      icon: const Icon(Icons.call, color: Colors.green),
+                      style: IconButton.styleFrom(backgroundColor: Colors.green.withValues(alpha: 0.1)),
+                    ),
+                  ],
                 ),
-              ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => _updateStatus(context, loadId, 'completed'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    child: const Text('Mark as Delivered'),
+                  ),
+                ),
+              ],
+              if (data['status'] == 'completed') ...[
+                const Divider(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => transify_completed.CompletedLoadDetailsScreen(loadData: data),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.receipt_long, color: Colors.green),
+                    label: const Text('View Delivery Proof', style: TextStyle(color: Colors.green)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.green),
+                    ),
+                  ),
+                ),
+              ],
+              if (data['status'] == 'pending') ...[
+                const Divider(height: 24),
+                TextButton.icon(
+                  onPressed: () => _cancelLoad(context, loadId),
+                  icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                  label: const Text('Cancel Load', style: TextStyle(color: Colors.red)),
+                ),
+              ],
             ],
-            if (data['status'] == 'pending') ...[
-              const Divider(height: 24),
-              TextButton.icon(
-                onPressed: () => _cancelLoad(context, loadId),
-                icon: const Icon(Icons.cancel_outlined, color: Colors.red),
-                label: const Text('Cancel Load', style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
