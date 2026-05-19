@@ -7,8 +7,15 @@ const admin = require('firebase-admin');
 
 // Initialize Firebase Admin safely
 try {
-  // To make push notifications work in prod, place your firebase service account JSON file in the backend root
-  const serviceAccount = require('../firebase-service-account.json');
+  let serviceAccount;
+  // To make push notifications work securely in prod (like Render), parse the JSON from an Environment Variable
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } else {
+    // Local development fallback
+    serviceAccount = require('../firebase-service-account.json');
+  }
+
   if (!admin.apps.length) {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
@@ -16,7 +23,7 @@ try {
     console.log('[FCM] Firebase Admin Initialized successfully.');
   }
 } catch (error) {
-  console.log('[FCM-WARNING] Firebase Admin not initialized. Please add firebase-service-account.json to the backend folder.');
+  console.log('[FCM-WARNING] Firebase Admin not initialized. Please set FIREBASE_SERVICE_ACCOUNT env var in Render or add firebase-service-account.json locally.');
 }
 
 // Middleware to check DB connection
