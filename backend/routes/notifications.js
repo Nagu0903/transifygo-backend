@@ -10,7 +10,12 @@ try {
   let serviceAccount;
   // To make push notifications work securely in prod (like Render), parse the JSON from an Environment Variable
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    let rawJson = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+    // If it's base64 encoded (does not start with a JSON brace '{'), decode it
+    if (!rawJson.startsWith('{')) {
+      rawJson = Buffer.from(rawJson, 'base64').toString('utf8');
+    }
+    serviceAccount = JSON.parse(rawJson);
   } else {
     // Local development fallback
     serviceAccount = require('../firebase-service-account.json');
