@@ -50,7 +50,7 @@ class NotificationService {
 
     // 3. Local Notifications Setup
     const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/launcher_icon');
+        AndroidInitializationSettings('ic_notification');
     
     const InitializationSettings initializationSettings = InitializationSettings(
       android: initializationSettingsAndroid,
@@ -158,6 +158,8 @@ class NotificationService {
       showWhen: true,
       enableVibration: true,
       playSound: true,
+      icon: 'ic_notification',
+      color: Color(0xFF0D47A1),
     );
 
     const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);

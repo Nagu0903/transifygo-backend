@@ -23,6 +23,7 @@ try {
     console.log('[FCM] Firebase Admin Initialized successfully.');
   }
 } catch (error) {
+  console.error('[FCM-ERROR] Firebase Admin initialization failed:', error.message);
   console.log('[FCM-WARNING] Firebase Admin not initialized. Please set FIREBASE_SERVICE_ACCOUNT env var in Render or add firebase-service-account.json locally.');
 }
 
@@ -109,7 +110,9 @@ const sendPushNotification = async (userId, title, body, type, data = {}) => {
               priority: 'high',
               notification: {
                 sound: 'default',
-                channelId: 'transify_go_channel' // Matches Flutter local channel
+                channelId: 'transify_go_channel', // Matches Flutter local channel
+                icon: 'ic_notification',
+                color: '#0D47A1'
               }
             }
           };
