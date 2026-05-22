@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const BASE_URL = 'https://transify-backend.onrender.com/api';
+const BASE_URL = 'http://localhost:5000/api';
 
 async function runTests() {
   console.log('🚀 Starting Backend API Integration Tests...\n');
@@ -38,16 +38,16 @@ async function runTests() {
 
     // 4. Post Load
     console.log('Testing Post Load...');
-    const postLoad = await axios.post(`${BASE_URL}/loads`, {
-      ownerId: ownerId,
-      ownerName: 'Test Owner',
-      ownerPhone: testPhone,
-      from: 'Hubli',
-      to: 'Bangalore',
+    const postLoad = await axios.post(`${BASE_URL}/loads/create`, {
+      userId: ownerId,
+      fullName: 'Test Owner',
+      phone: testPhone,
+      fromLocation: 'Hubli',
+      toLocation: 'Bangalore',
       material: 'Rice',
       weight: '10 Tons',
-      vehicle: 'Lorry',
-      amount: '5000',
+      truckType: 'Lorry',
+      price: '5000',
       distance: '400'
     });
     console.log('✅ Post Load Success:', postLoad.data.success, '\n');

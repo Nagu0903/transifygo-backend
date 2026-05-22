@@ -78,7 +78,19 @@ const sendPushNotification = async (userId, title, body, type, data = {}) => {
 
     // 2. Get User's FCM Token and send push
     const user = await User.findById(userId);
-    if (user && user.fcmToken) {
+    
+    if (!user) {
+      console.log(`[FCM-LOG] Notification failed: User ${userId} not found.`);
+      return false;
+    }
+
+    if (type === 'new_load') {
+      console.log(`[FCM-LOG] Driver notification triggered for User ${userId}`);
+    } else if (type === 'load_accepted') {
+      console.log(`[FCM-LOG] Owner notification triggered for User ${userId}`);
+    }
+
+    if (user.fcmToken) {
         console.log(`[FCM] Dispatching to ${user.fcmToken}: ${title}`);
         
         if (admin.apps.length > 0) {
@@ -102,15 +114,21 @@ const sendPushNotification = async (userId, title, body, type, data = {}) => {
             }
           };
 
-          const response = await admin.messaging().send(message);
-          console.log('[FCM] Successfully sent message:', response);
+          try {
+            await admin.messaging().send(message);
+            console.log("FCM_SEND_SUCCESS");
+          } catch(error) {
+            console.error("FCM_SEND_FAILED", error);
+          }
         } else {
           console.log('[FCM-WARNING] Firebase admin not configured. Skipping real push dispatch.');
         }
+    } else {
+        console.log(`[FCM-LOG] Token invalid or missing for User ${userId}.`);
     }
     return true;
   } catch (err) {
-    console.error('[FCM-ERROR] Push Notification Error:', err);
+    console.error(`[FCM-LOG] Push Notification Error for User ${userId}:`, err.message);
     return false;
   }
 };

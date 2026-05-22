@@ -47,17 +47,42 @@ router.post('/create', checkDB, async (req, res) => {
     await newLoad.save();
     console.log('✅ Load Created:', newLoad._id);
 
-    // Notify Nearby Drivers (Simulated broadcast to all drivers for now)
-    const drivers = await User.find({ role: 'Driver' });
-    drivers.forEach(driver => {
-      sendPushNotification(
-        driver._id, 
-        'New Load Available! 🚛', 
-        `From ${fromLocation} to ${toLocation}`, 
-        'new_load', 
-        { loadId: newLoad._id }
-      );
-    });
+    // Notify Active Drivers with FCM Tokens asynchronously
+    const notifyDrivers = async () => {
+      console.log("NEW_LOAD_NOTIFY_STARTED");
+      try {
+        const drivers = await User.find({ 
+          role: 'Driver', 
+          isBlocked: { $ne: true },
+          fcmToken: { $exists: true, $ne: '', $ne: null }
+        });
+
+        console.log("DRIVERS_FOUND", drivers.length);
+        console.log(drivers.slice(0, 5));
+
+        for (const driver of drivers) {
+          console.log("DRIVER_TOKEN", driver.fcmToken);
+          const bodyMsg = `New load posted from ${fromLocation || 'N/A'} to ${toLocation || 'N/A'} • ₹${price || 'N/A'}\nMaterial: ${material || 'N/A'} | Vehicle: ${truckType || 'N/A'}`;
+          await sendPushNotification(
+            driver._id.toString(), 
+            '🚛 New Load Available', 
+            bodyMsg, 
+            'new_load', 
+            { 
+               loadId: newLoad._id.toString(),
+               pickup: fromLocation || '',
+               drop: toLocation || '',
+               amount: price ? price.toString() : ''
+            }
+          );
+        }
+      } catch (notifyErr) {
+        console.error('Background driver notification error:', notifyErr);
+      }
+    };
+    
+    // Execute asynchronously without blocking the API response
+    notifyDrivers();
 
     res.status(201).json({ success: true, message: 'Load posted successfully', load: newLoad });
   } catch (err) {
@@ -124,12 +149,17 @@ router.put('/status/:loadId', checkDB, async (req, res) => {
 
     // Notify Owner about Acceptance or Driver about Completion
     if (status === 'accepted') {
+      console.log("ACCEPT_NOTIFY_STARTED");
+      const owner = await User.findById(load.userId);
+      console.log("OWNER_FOUND", owner?._id);
+      console.log("OWNER_TOKEN", owner?.fcmToken);
+      const acceptBody = `Driver: ${driverName || 'N/A'}\nFrom: ${load.fromLocation || 'N/A'} to ${load.toLocation || 'N/A'}\nVehicle: ${load.truckType || 'N/A'}\nAmount: ₹${load.price || 'N/A'}`;
       sendPushNotification(
         load.userId, 
-        'Load Accepted! ✅', 
-        `Driver ${driverName} has accepted your load from ${load.fromLocation}.`, 
+        'Your load has been accepted by a driver.', 
+        acceptBody, 
         'load_accepted', 
-        { loadId: load._id }
+        { loadId: load._id.toString() }
       );
     } else if (status === 'completed') {
       sendPushNotification(
