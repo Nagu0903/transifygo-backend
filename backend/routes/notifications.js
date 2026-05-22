@@ -11,14 +11,36 @@ try {
   // To make push notifications work securely in prod (like Render), parse the JSON from an Environment Variable
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     let rawJson = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
-    // If it's base64 encoded (does not start with a JSON brace '{'), decode it
+    // Strip whitespaces or newlines if it's base64 encoded
     if (!rawJson.startsWith('{')) {
+      rawJson = rawJson.replace(/\s+/g, '');
       rawJson = Buffer.from(rawJson, 'base64').toString('utf8');
     }
     serviceAccount = JSON.parse(rawJson);
   } else {
-    // Local development fallback
-    serviceAccount = require('../firebase-service-account.json');
+    // Local development fallback or Render Secret File search
+    const fs = require('fs');
+    const path = require('path');
+    const pathsToTry = [
+      path.join(__dirname, '../firebase-service-account.json'), // backend/firebase-service-account.json
+      path.join(__dirname, '../../firebase-service-account.json'), // root/firebase-service-account.json
+      path.join(process.cwd(), 'firebase-service-account.json'), // cwd root
+      path.join(process.cwd(), 'backend', 'firebase-service-account.json') // cwd backend
+    ];
+
+    let foundPath;
+    for (const p of pathsToTry) {
+      if (fs.existsSync(p)) {
+        foundPath = p;
+        break;
+      }
+    }
+
+    if (foundPath) {
+      serviceAccount = require(foundPath);
+    } else {
+      throw new Error('firebase-service-account.json not found in any standard path.');
+    }
   }
 
   if (!admin.apps.length) {
