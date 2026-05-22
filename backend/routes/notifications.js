@@ -8,17 +8,39 @@ const admin = require('firebase-admin');
 // Initialize Firebase Admin safely
 try {
   let serviceAccount;
-  // To make push notifications work securely in prod (like Render), parse the JSON from an Environment Variable
+  let source = '';
+  let envVarError = null;
+
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    let rawJson = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
-    // Strip whitespaces or newlines if it's base64 encoded
-    if (!rawJson.startsWith('{')) {
-      rawJson = rawJson.replace(/\s+/g, '');
-      rawJson = Buffer.from(rawJson, 'base64').toString('utf8');
+    try {
+      const rawEnv = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+      console.log(`[FCM-DEBUG] FIREBASE_SERVICE_ACCOUNT env var found. Length: ${rawEnv.length} chars.`);
+      
+      let parsedString = rawEnv;
+      if (!rawEnv.startsWith('{')) {
+        console.log('[FCM-DEBUG] Env var does not start with "{". Treating as Base64 encoded.');
+        const sanitizedBase64 = rawEnv.replace(/\s+/g, '');
+        console.log(`[FCM-DEBUG] Sanitized Base64 length: ${sanitizedBase64.length} chars.`);
+        parsedString = Buffer.from(sanitizedBase64, 'base64').toString('utf8');
+      } else {
+        console.log('[FCM-DEBUG] Env var starts with "{". Treating as raw JSON.');
+      }
+      
+      const safeFirst = parsedString.slice(0, 30);
+      const safeLast = parsedString.slice(-30);
+      console.log(`[FCM-DEBUG] Attempting to parse JSON string. First 30: "${safeFirst}" | Last 30: "${safeLast}"`);
+      
+      serviceAccount = JSON.parse(parsedString);
+      source = 'Environment Variable';
+    } catch (err) {
+      envVarError = err;
+      console.warn('[FCM-WARNING] Failed to parse FIREBASE_SERVICE_ACCOUNT env var:', err.message);
+      console.log('[FCM-LOG] Falling back to check for secret file...');
     }
-    serviceAccount = JSON.parse(rawJson);
-  } else {
-    // Local development fallback or Render Secret File search
+  }
+
+  // If env var was not set or failed to parse, check for secret file
+  if (!serviceAccount) {
     const fs = require('fs');
     const path = require('path');
     const pathsToTry = [
@@ -37,9 +59,21 @@ try {
     }
 
     if (foundPath) {
-      serviceAccount = require(foundPath);
+      source = `Secret File (${path.basename(foundPath)})`;
+      console.log(`[FCM-DEBUG] Loading service account from file: ${foundPath}`);
+      const fileContent = fs.readFileSync(foundPath, 'utf8');
+      console.log(`[FCM-DEBUG] File content length: ${fileContent.length} chars.`);
+      
+      const safeFirst = fileContent.slice(0, 30);
+      const safeLast = fileContent.slice(-30);
+      console.log(`[FCM-DEBUG] Attempting to parse file JSON. First 30: "${safeFirst}" | Last 30: "${safeLast}"`);
+      
+      serviceAccount = JSON.parse(fileContent);
     } else {
-      throw new Error('firebase-service-account.json not found in any standard path.');
+      if (envVarError) {
+        throw envVarError; // Re-throw the original environment variable parsing error if no file fallback exists
+      }
+      throw new Error('firebase-service-account.json not found in any standard path, and no valid environment variable provided.');
     }
   }
 
@@ -47,11 +81,11 @@ try {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
     });
-    console.log('[FCM] Firebase Admin Initialized successfully.');
+    console.log(`[FCM] Firebase Admin Initialized successfully from ${source}.`);
   }
 } catch (error) {
   console.error('[FCM-ERROR] Firebase Admin initialization failed:', error.message);
-  console.log('[FCM-WARNING] Firebase Admin not initialized. Please set FIREBASE_SERVICE_ACCOUNT env var in Render or add firebase-service-account.json locally.');
+  console.log('[FCM-WARNING] Firebase Admin not initialized. Please configure valid Firebase credentials.');
 }
 
 // Middleware to check DB connection
