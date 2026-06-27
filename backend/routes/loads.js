@@ -21,7 +21,27 @@ const checkDB = (req, res, next) => {
 router.post('/create', checkDB, async (req, res) => {
   console.log('--- Create Load Request ---');
   try {
-    const { userId, fullName, phone, fromLocation, toLocation, truckType, material, price, weight, notes, distance } = req.body;
+    const { 
+      userId, 
+      fullName, 
+      phone, 
+      fromLocation, 
+      fromDistrict,
+      fromState,
+      fromLat,
+      fromLng,
+      toLocation, 
+      toDistrict,
+      toState,
+      toLat,
+      toLng,
+      truckType, 
+      material, 
+      price, 
+      weight, 
+      notes, 
+      distance 
+    } = req.body;
 
     if (!userId || !fromLocation || !toLocation || !price) {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
@@ -32,7 +52,15 @@ router.post('/create', checkDB, async (req, res) => {
       fullName,
       phone,
       fromLocation,
+      fromDistrict,
+      fromState,
+      fromLat,
+      fromLng,
       toLocation,
+      toDistrict,
+      toState,
+      toLat,
+      toLng,
       truckType,
       material,
       price,

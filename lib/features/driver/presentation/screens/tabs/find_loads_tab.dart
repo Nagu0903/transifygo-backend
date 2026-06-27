@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:transify_app/core/constants/app_colors.dart';
 import 'package:transify_app/core/localization/language_provider.dart';
 import 'package:transify_app/core/services/session_service.dart';
@@ -63,10 +62,17 @@ class _FindLoadsTabState extends State<FindLoadsTab> {
             listener: (context, state) {
               if (state is LoadSuccess) {
                 final msg = state.message.toLowerCase();
-                if (msg.contains('accepted') || msg.contains('cancelled')) {
-                  debugPrint('[DRIVER] List change detected, refreshing...');
+                if (msg.contains('accepted') || msg.contains('cancelled') || msg.contains('bid')) {
+                  debugPrint('[DRIVER] List change detected or bid placed, refreshing...');
                   _fetchPending();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(state.message), backgroundColor: Colors.green),
+                  );
                 }
+              } else if (state is LoadError) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(state.message), backgroundColor: Colors.red),
+                );
               }
             },
             child: BlocBuilder<LoadBloc, LoadState>(
@@ -160,25 +166,19 @@ class _FindLoadsTabState extends State<FindLoadsTab> {
               ],
             ),
             const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => launchUrl(Uri.parse('tel:${data['phone']}')),
-                    icon: const Icon(Icons.call),
-                    label: const Text('Call Owner'),
-                    style: OutlinedButton.styleFrom(foregroundColor: Colors.green, side: const BorderSide(color: Colors.green)),
-                  ),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _showPlaceBidDialog(context, loadId, data),
+                icon: const Icon(Icons.gavel),
+                label: const Text('Place Bid', style: TextStyle(fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryBlue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _showAcceptConfirmation(context, loadId),
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryBlue),
-                    child: const Text('Accept Load'),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -231,35 +231,74 @@ class _FindLoadsTabState extends State<FindLoadsTab> {
     );
   }
 
-  void _showAcceptConfirmation(BuildContext context, String loadId) {
+  void _showPlaceBidDialog(BuildContext context, String loadId, Map<String, dynamic> loadData) {
+    final amountController = TextEditingController(text: loadData['price']?.toString() ?? '');
+    final messageController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Accept Load?'),
-        content: const Text('Are you sure you want to accept this booking?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              final session = await SessionService.getSession();
-              if (context.mounted) {
-                context.read<LoadBloc>().add(UpdateLoadStatusRequested(
-                  loadId, 
-                  'accepted', 
-                  extraData: {
-                    'driverId': session['uid'],
-                    'driverName': session['name'],
-                    'driverPhone': session['phone'],
+        title: const Text('Place Bid', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Bid Amount (₹)',
+                  prefixIcon: Icon(Icons.currency_rupee),
+                ),
+                validator: (val) {
+                  if (val == null || val.trim().isEmpty) {
+                    return 'Please enter an amount';
                   }
-                ));
-                Navigator.pop(ctx);
-                // Refresh loads
-                context.read<LoadBloc>().add(FetchPendingLoadsRequested());
+                  if (double.tryParse(val) == null || double.parse(val) <= 0) {
+                    return 'Please enter a valid positive amount';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: messageController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Optional Message',
+                  prefixIcon: Icon(Icons.message_outlined),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                final amount = double.parse(amountController.text.trim());
+                final msg = messageController.text.trim();
+                final session = await SessionService.getSession();
                 
-                // Show a brief message if it fails on backend (optional, but Bloc usually handles error)
+                if (ctx.mounted) {
+                  context.read<LoadBloc>().add(PlaceBidRequested(
+                    loadId: loadId,
+                    driverId: session['uid'] ?? '',
+                    bidAmount: amount,
+                    message: msg,
+                  ));
+                  Navigator.pop(ctx);
+                }
               }
             },
-            child: const Text('Accept', style: TextStyle(fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryBlue),
+            child: const Text('Submit Bid'),
           ),
         ],
       ),

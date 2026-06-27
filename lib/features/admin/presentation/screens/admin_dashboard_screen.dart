@@ -3,6 +3,7 @@ import 'package:transify_app/features/admin/data/repositories/admin_repository.d
 import 'package:transify_app/features/auth/presentation/screens/role_selection_screen.dart';
 import 'package:transify_app/core/constants/app_colors.dart';
 import 'package:transify_app/core/utils/snackbar_utils.dart';
+import 'package:transify_app/features/admin/presentation/screens/admin_fleet_map_screen.dart';
 
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -18,6 +19,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Map<String, dynamic> _stats = {};
   List<Map<String, dynamic>> _recentLoads = [];
   List<Map<String, dynamic>> _recentUsers = [];
+  List<Map<String, dynamic>> _bids = [];
 
   @override
   void initState() {
@@ -31,12 +33,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       final stats = await _adminRepo.fetchStats();
       final loads = await _adminRepo.fetchLoads();
       final users = await _adminRepo.fetchUsers();
+      final bids = await _adminRepo.fetchBids();
       
       if (mounted) {
         setState(() {
           _stats = stats;
           _recentLoads = loads;
           _recentUsers = users;
+          _bids = bids;
           _isLoading = false;
         });
       }
@@ -54,6 +58,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       appBar: AppBar(
         title: const Text('Admin Panel', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          IconButton(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminFleetMapScreen())),
+            icon: const Icon(Icons.map_outlined),
+            tooltip: 'Live Fleet Monitor Map',
+          ),
           IconButton(onPressed: _refreshData, icon: const Icon(Icons.refresh)),
           IconButton(
             onPressed: () => Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const RoleSelectionScreen()), (route) => false),
@@ -75,6 +84,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   _buildSectionTitle('Live Loads Monitoring', Icons.local_shipping),
                   const SizedBox(height: 16),
                   _buildLoadMonitor(),
+                  const SizedBox(height: 32),
+                  _buildSectionTitle('Pending Bids Approval', Icons.gavel),
+                  const SizedBox(height: 16),
+                  _buildBidMonitor(),
                   const SizedBox(height: 32),
                   _buildSectionTitle('User Management', Icons.people),
                   const SizedBox(height: 16),
@@ -243,6 +256,155 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     } catch (e) {
       if (mounted) SnackBarUtils.showError(context, 'Update failed: $e');
 
+    }
+  }
+
+  Widget _buildBidMonitor() {
+    if (_bids.isEmpty) {
+      return _buildEmptyState('No pending bids found');
+    }
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _bids.length,
+      itemBuilder: (context, index) {
+        final bid = _bids[index];
+        final bidId = bid['_id'] ?? bid['id'];
+        final load = bid['loadDetails'] ?? {};
+        final driver = bid['driverDetails'] ?? {};
+        final bidAmount = bid['bidAmount']?.toString() ?? '0';
+        final bidMessage = bid['message'] ?? '';
+        final status = (bid['status'] ?? 'Pending').toString();
+        
+        String timeStr = 'N/A';
+        if (bid['createdAt'] != null) {
+          try {
+            final dt = DateTime.parse(bid['createdAt']);
+            timeStr = "${dt.day}/${dt.month} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}";
+          } catch (_) {}
+        }
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${load['fromLocation'] ?? 'N/A'} → ${load['toLocation'] ?? 'N/A'}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        'Bid: ₹$bidAmount',
+                        style: const TextStyle(color: AppColors.primaryBlue, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Driver: ${driver['name'] ?? 'Unknown'} • Rating: ${driver['rating'] ?? '5.0'} ★',
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Vehicle: ${driver['truckType'] ?? 'N/A'} (${driver['truckNumber'] ?? 'N/A'})',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Load details: ${load['material'] ?? 'N/A'} • ${load['weight'] ?? 'N/A'} • Original Price: ₹${load['price'] ?? '0'}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                ),
+                if (bidMessage.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Message: "$bidMessage"',
+                      style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Time: $timeStr', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    if (status == 'Pending')
+                      Row(
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => _handleBidAction(bidId, false),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              side: const BorderSide(color: Colors.red),
+                            ),
+                            child: const Text('Reject'),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () => _handleBidAction(bidId, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Accept'),
+                          ),
+                        ],
+                      )
+                    else
+                      Text(
+                        status.toUpperCase(),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: status == 'Accepted' ? Colors.green : Colors.red,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _handleBidAction(String bidId, bool accept) async {
+    setState(() => _isLoading = true);
+    try {
+      if (accept) {
+        await _adminRepo.acceptBid(bidId);
+        if (mounted) SnackBarUtils.showSuccess(context, 'Bid accepted successfully!');
+      } else {
+        await _adminRepo.rejectBid(bidId);
+        if (mounted) SnackBarUtils.showSuccess(context, 'Bid rejected successfully!');
+      }
+      _refreshData();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        SnackBarUtils.showError(context, 'Action failed: $e');
+      }
     }
   }
 

@@ -11,27 +11,115 @@ try {
   let source = '';
   let envVarError = null;
 
+  // Robust function to parse FIREBASE_SERVICE_ACCOUNT environment variable JSON safely
+  function safeParseServiceAccount(rawEnv) {
+    if (!rawEnv) return null;
+    const trimmed = rawEnv.trim();
+    if (!trimmed) return null;
+
+    let jsonStr = trimmed;
+
+    // 1. Check if Base64 encoded (does not start with '{' or '[')
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      try {
+        const sanitizedBase64 = trimmed.replace(/\s+/g, '');
+        const decoded = Buffer.from(sanitizedBase64, 'base64').toString('utf8');
+        if (decoded.trim().startsWith('{')) {
+          jsonStr = decoded.trim();
+          console.log('[FCM-DEBUG] Successfully decoded Base64 payload.');
+        }
+      } catch (e) {
+        console.log(`[FCM-DEBUG] Base64 decode skipped/failed: ${e.message}`);
+      }
+    }
+
+    // 2. Remove potential leading/trailing outer quotes (often added by environment loaders)
+    if ((jsonStr.startsWith('"') && jsonStr.endsWith('"')) || (jsonStr.startsWith("'") && jsonStr.endsWith("'"))) {
+      jsonStr = jsonStr.slice(1, -1).trim();
+    }
+
+    // 3. Try standard JSON.parse first
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (err) {
+      console.warn(`[FCM-WARNING] Direct JSON.parse failed: ${err.message}. Attempting recovery...`);
+    }
+
+    // 4. Try escaping literal newlines inside string values (literal newlines break JSON.parse)
+    try {
+      let sanitized = '';
+      let inString = false;
+      let stringChar = null;
+      for (let i = 0; i < jsonStr.length; i++) {
+        const char = jsonStr[i];
+        if (char === '"' || char === "'") {
+          if (!inString) {
+            inString = true;
+            stringChar = char;
+            sanitized += char;
+          } else if (stringChar === char && jsonStr[i - 1] !== '\\') {
+            inString = false;
+            stringChar = null;
+            sanitized += char;
+          } else {
+            sanitized += char;
+          }
+        } else if (char === '\n' || char === '\r') {
+          if (inString) {
+            sanitized += '\\n';
+          } else {
+            sanitized += char;
+          }
+        } else {
+          sanitized += char;
+        }
+      }
+
+      const parsed = JSON.parse(sanitized);
+      if (parsed && typeof parsed === 'object') {
+        console.log('[FCM-DEBUG] Successfully parsed after escaping literal newlines.');
+        return parsed;
+      }
+    } catch (err) {
+      console.warn(`[FCM-WARNING] Sanitization recovery failed: ${err.message}. Trying regex extraction fallback...`);
+    }
+
+    // 5. Try regex key-value extraction fallback for heavily malformed structure (e.g. trailing commas)
+    try {
+      const extracted = {};
+      const regexFlexible = /['"]?([a-zA-Z0-9_-]+)['"]?\s*:\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/g;
+      let match;
+      while ((match = regexFlexible.exec(jsonStr)) !== null) {
+        const key = match[1];
+        let val = match[2] !== undefined ? match[2] : match[3];
+        // Unescape escaped quotes and backslashes
+        val = val.replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+        extracted[key] = val;
+      }
+
+      if (extracted.private_key && extracted.client_email && extracted.project_id) {
+        console.log('[FCM-DEBUG] Successfully recovered Firebase Service Account via regex parsing.');
+        return extracted;
+      }
+    } catch (regexErr) {
+      console.warn(`[FCM-WARNING] Regex fallback parsing failed: ${regexErr.message}`);
+    }
+
+    throw new Error('Unable to parse service account JSON correctly.');
+  }
+
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     try {
-      const rawEnv = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+      const rawEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
       console.log(`[FCM-DEBUG] FIREBASE_SERVICE_ACCOUNT env var found. Length: ${rawEnv.length} chars.`);
       
-      let parsedString = rawEnv;
-      if (!rawEnv.startsWith('{')) {
-        console.log('[FCM-DEBUG] Env var does not start with "{". Treating as Base64 encoded.');
-        const sanitizedBase64 = rawEnv.replace(/\s+/g, '');
-        console.log(`[FCM-DEBUG] Sanitized Base64 length: ${sanitizedBase64.length} chars.`);
-        parsedString = Buffer.from(sanitizedBase64, 'base64').toString('utf8');
-      } else {
-        console.log('[FCM-DEBUG] Env var starts with "{". Treating as raw JSON.');
+      serviceAccount = safeParseServiceAccount(rawEnv);
+      if (serviceAccount) {
+        source = 'Environment Variable';
       }
-      
-      const safeFirst = parsedString.slice(0, 30);
-      const safeLast = parsedString.slice(-30);
-      console.log(`[FCM-DEBUG] Attempting to parse JSON string. First 30: "${safeFirst}" | Last 30: "${safeLast}"`);
-      
-      serviceAccount = JSON.parse(parsedString);
-      source = 'Environment Variable';
     } catch (err) {
       envVarError = err;
       console.warn('[FCM-WARNING] Failed to parse FIREBASE_SERVICE_ACCOUNT env var:', err.message);
@@ -64,10 +152,6 @@ try {
       const fileContent = fs.readFileSync(foundPath, 'utf8');
       console.log(`[FCM-DEBUG] File content length: ${fileContent.length} chars.`);
       
-      const safeFirst = fileContent.slice(0, 30);
-      const safeLast = fileContent.slice(-30);
-      console.log(`[FCM-DEBUG] Attempting to parse file JSON. First 30: "${safeFirst}" | Last 30: "${safeLast}"`);
-      
       serviceAccount = JSON.parse(fileContent);
     } else {
       if (envVarError) {
@@ -77,11 +161,18 @@ try {
     }
   }
 
+  // Normalize private key newline formatting if present
+  if (serviceAccount && serviceAccount.private_key) {
+    // Preserve escaped \n by mapping literal \\n sequences to actual newlines required by cert helper
+    serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+  }
+
   if (!admin.apps.length) {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
     });
-    console.log(`[FCM] Firebase Admin Initialized successfully from ${source}.`);
+    console.log('[FCM] Firebase Admin initialized successfully');
+    console.log('[FCM] Push notification service ready');
   }
 } catch (error) {
   console.error('[FCM-ERROR] Firebase Admin initialization failed:', error.message);
@@ -156,16 +247,26 @@ const sendPushNotification = async (userId, title, body, type, data = {}) => {
         console.log(`[FCM] Dispatching to ${user.fcmToken}: ${title}`);
         
         if (admin.apps.length > 0) {
+          // Convert all values inside data payload to string to prevent FCM validation failures (e.g. Mongoose ObjectIds)
+          const stringData = {
+            type: String(type || ''),
+            click_action: 'FLUTTER_NOTIFICATION_CLICK'
+          };
+
+          for (const [key, val] of Object.entries(data)) {
+            if (val !== null && val !== undefined) {
+              stringData[key] = typeof val === 'object' ? 
+                (val.toString && typeof val.toString === 'function' ? val.toString() : JSON.stringify(val)) : 
+                String(val);
+            }
+          }
+
           const message = {
             notification: {
               title: title,
               body: body,
             },
-            data: {
-              type: type,
-              ...data,
-              click_action: 'FLUTTER_NOTIFICATION_CLICK' // Triggers foreground/background handling
-            },
+            data: stringData,
             token: user.fcmToken,
             android: {
               priority: 'high',
@@ -174,6 +275,15 @@ const sendPushNotification = async (userId, title, body, type, data = {}) => {
                 channelId: 'transify_go_channel', // Matches Flutter local channel
                 icon: 'ic_notification',
                 color: '#0D47A1'
+              }
+            },
+            apns: {
+              payload: {
+                aps: {
+                  sound: 'default',
+                  badge: 1,
+                  'content-available': 1
+                }
               }
             }
           };

@@ -1,0 +1,31 @@
+# The Podfile for Flutter iOS projects.
+platform :ios, '13.0'
+
+# CocoaPods analytics sends usage stats. Change to false to disable.
+# cocoapods_analytics = false
+
+flutter_root = File.expand_path('..', File.dirname(__FILE__))
+
+require File.expand_path(File.join('Flutter', 'podhelper'), File.dirname(__FILE__))
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_ios_pods File.dirname(__FILE__)
+
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    
+    # Force 13.0 minimum platform deployment target to avoid compilation conflicts
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+    end
+  end
+end

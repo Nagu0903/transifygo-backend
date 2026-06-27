@@ -1,0 +1,143 @@
+name: TransifyGo Release Build & Deployment
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
+
+jobs:
+  # -------------------- ANDROID BUILD JOB --------------------
+  build-android:
+    name: Build Android APK & AAB
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java Development Kit
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9' # Matches user's local doctor output
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Optional: Decrypt and setup Android Keystore if provided in secrets
+      - name: Configure Keystore
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          cat <<EOF > android/key.properties
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Build release App Bundle (AAB)
+        run: flutter build appbundle --release
+
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: transify-go-android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload Android AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: transify-go-android-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+
+  # -------------------- iOS BUILD JOB --------------------
+  build-ios:
+    name: Build iOS IPA & Deploy to TestFlight
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9' # Matches user's local doctor output
+          channel: 'stable'
+          cache: true
+
+      - name: Install Apple Certificate and Provisioning Profile
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: "temporary-keychain-pass"
+        run: |
+          # 1. Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+
+          # 2. Decode and import certificate
+          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > release_cert.p12
+          security import release_cert.p12 -k build.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+
+          # 3. Decode and install provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+
+      - name: Update ExportOptions with Secrets
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          IOS_PROVISION_PROFILE_NAME: ${{ secrets.IOS_PROVISION_PROFILE_NAME }}
+        run: |
+          # Replace placeholder teamID and provisioning profile name with real values
+          sed -i '' "s/EXPORT_TEAM_ID/$APPLE_TEAM_ID/g" ios/ExportOptions.plist
+          sed -i '' "s/EXPORT_PROVISIONING_PROFILE/$IOS_PROVISION_PROFILE_NAME/g" ios/ExportOptions.plist
+          
+          echo "ExportOptions.plist configured:"
+          cat ios/ExportOptions.plist
+
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          pod repo update
+          pod install --repo-update
+          cd ..
+
+      - name: Build iOS IPA Package
+        run: |
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+
+      - name: Upload iOS IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: transify-go-ios-ipa
+          path: build/ios/ipa/*.ipa
+
+      - name: Deploy to Apple TestFlight
+        if: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT != '' }}
+        uses: AppleActions/upload-testflight-build@v1
+        with:
+          app-path: build/ios/ipa/*.ipa
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          api-key-content: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}

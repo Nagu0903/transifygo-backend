@@ -116,4 +116,19 @@ class LoadRepository {
       rethrow;
     }
   }
+
+  // 9. Place a Bid (For Driver)
+  Future<void> placeBid(String loadId, String driverId, double bidAmount, String message) async {
+    try {
+      await _apiService.post('/bids/place', {
+        'loadId': loadId,
+        'driverId': driverId,
+        'bidAmount': bidAmount,
+        'message': message,
+      });
+    } catch (e) {
+      debugPrint('[LOAD_REPO] Place Bid Error: $e');
+      rethrow;
+    }
+  }
 }

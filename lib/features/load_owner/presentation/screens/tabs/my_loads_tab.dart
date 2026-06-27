@@ -7,6 +7,7 @@ import 'package:transify_app/core/localization/language_provider.dart';
 import 'package:transify_app/core/services/session_service.dart';
 import 'package:transify_app/features/load_owner/presentation/bloc/load_bloc.dart';
 import 'package:transify_app/features/load_owner/presentation/screens/completed_load_details_screen.dart' as transify_completed;
+import 'package:transify_app/features/load_owner/presentation/screens/track_vehicle_screen.dart';
 import 'dart:async';
 import 'package:transify_app/core/services/notification_service.dart';
 
@@ -208,13 +209,42 @@ class _MyLoadsTabState extends State<MyLoadsTab> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => _updateStatus(context, loadId, 'completed'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                    child: const Text('Mark as Delivered'),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => TrackVehicleScreen(loadData: data),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.map_outlined),
+                        label: const Text('Track Vehicle'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryBlue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => _updateStatus(context, loadId, 'completed'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: const Text('Mark as Delivered'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
               if (data['status'] == 'completed') ...[
@@ -240,10 +270,22 @@ class _MyLoadsTabState extends State<MyLoadsTab> {
               ],
               if (data['status'] == 'pending') ...[
                 const Divider(height: 24),
-                TextButton.icon(
-                  onPressed: () => _cancelLoad(context, loadId),
-                  icon: const Icon(Icons.cancel_outlined, color: Colors.red),
-                  label: const Text('Cancel Load', style: TextStyle(color: Colors.red)),
+                Row(
+                  children: [
+                    const Icon(Icons.hourglass_empty, size: 16, color: Colors.orange),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Waiting for Admin Review',
+                      style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () => _cancelLoad(context, loadId),
+                      icon: const Icon(Icons.cancel_outlined, color: Colors.red, size: 18),
+                      label: const Text('Cancel Load', style: TextStyle(color: Colors.red, fontSize: 13)),
+                      style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    ),
+                  ],
                 ),
               ],
             ],

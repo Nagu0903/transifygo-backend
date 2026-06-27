@@ -7,6 +7,8 @@ const authRoutes = require('./routes/auth');
 const { router: notificationRoutes } = require('./routes/notifications'); // Import notifications first
 const loadRoutes = require('./routes/loads');
 const adminRoutes = require('./routes/admin');
+const trackingRoutes = require('./routes/tracking');
+const bidRoutes = require('./routes/bids');
 
 const app = express();
 
@@ -20,6 +22,8 @@ app.use('/api/loads', loadRoutes);
 app.use('/api/load', loadRoutes); 
 app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/tracking', trackingRoutes);
+app.use('/api/bids', bidRoutes);
 
 // Root endpoint for health check
 app.get('/', (req, res) => {

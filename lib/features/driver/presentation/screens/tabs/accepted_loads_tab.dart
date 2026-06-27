@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:transify_app/core/constants/app_colors.dart';
 import 'package:transify_app/core/services/session_service.dart';
+import 'package:transify_app/core/services/tracking_service.dart';
 import 'package:transify_app/features/load_owner/presentation/bloc/load_bloc.dart';
 import 'package:transify_app/features/driver/presentation/screens/tabs/complete_load_sheet.dart' as transify_complete_sheet;
 
@@ -93,8 +94,84 @@ class _AcceptedLoadsTabState extends State<AcceptedLoadsTab> {
     );
 
     if (result == true) {
+      await TrackingService().stopTracking(loadId);
       // Refresh the list if completion was successful
       _fetchLoads();
+    }
+  }
+
+  void _toggleTripTracking(Map<String, dynamic> data) async {
+    final loadId = data['_id'];
+    final driverId = data['driverId'] ?? '';
+    final tracking = TrackingService();
+
+    if (tracking.isRunning && tracking.activeLoadId == loadId) {
+      await tracking.stopTracking(loadId);
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Trip tracking stopped successfully.')),
+        );
+      }
+    } else {
+      final consent = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          title: const Row(
+            children: [
+              Icon(Icons.location_on, color: AppColors.primaryBlue),
+              SizedBox(width: 8),
+              Text('Location Access Consent', style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: const Text(
+            'TransifyGo collects real-time location data to allow the load owner to monitor the transit status of their shipment.\n\n'
+            'This data will be gathered in the background (even when the app is minimized or closed) during active trips, and will only be shared with the load owner.\n\n'
+            'Do you agree to start live GPS tracking for this trip?',
+            style: TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Agree & Start Trip'),
+            ),
+          ],
+        ),
+      );
+
+      if (consent == true) {
+        final ownerId = data['userId'] ?? '';
+        final started = await tracking.startTracking(loadId, driverId, ownerId);
+        if (mounted) {
+          setState(() {});
+          if (started) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Trip started! Live tracking is active.')),
+            );
+          } else {
+            final errorMsg = TrackingService.lastError ?? 'Failed to start trip. Please enable location services and try again.';
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(errorMsg),
+                backgroundColor: Colors.red.shade900,
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
+        }
+      }
     }
   }
 
@@ -136,6 +213,76 @@ class _AcceptedLoadsTabState extends State<AcceptedLoadsTab> {
               ],
             ),
             const SizedBox(height: 24),
+            
+            // Trip Tracking Controls
+            Builder(
+              builder: (context) {
+                final tracking = TrackingService();
+                final isCurrentTripTracking = tracking.isRunning && tracking.activeLoadId == data['_id'];
+                final isAnotherTripTracking = tracking.isRunning && tracking.activeLoadId != data['_id'];
+
+                if (isCurrentTripTracking) {
+                  return Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _toggleTripTracking(data),
+                          icon: const Icon(Icons.stop),
+                          label: const Text('Stop Trip', style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  );
+                } else if (isAnotherTripTracking) {
+                  return Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: null,
+                          icon: const Icon(Icons.navigation),
+                          label: const Text('Start Trip (Other Trip Active)', style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  );
+                } else {
+                  return Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _toggleTripTracking(data),
+                          icon: const Icon(Icons.navigation),
+                          label: const Text('Start Trip', style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  );
+                }
+              },
+            ),
+
             Row(
               children: [
                 Expanded(

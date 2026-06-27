@@ -71,4 +71,33 @@ class AdminRepository {
       rethrow;
     }
   }
+
+  Future<List<Map<String, dynamic>>> fetchBids() async {
+    try {
+      final response = await _apiService.get('/admin/bids');
+      if (response.data['success']) {
+        final List bids = response.data['bids'];
+        return bids.map((e) => e as Map<String, dynamic>).toList();
+      }
+      return [];
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> acceptBid(String bidId) async {
+    try {
+      await _apiService.post('/admin/bids/$bidId/accept', {});
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> rejectBid(String bidId) async {
+    try {
+      await _apiService.post('/admin/bids/$bidId/reject', {});
+    } catch (e) {
+      rethrow;
+    }
+  }
 }

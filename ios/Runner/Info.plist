@@ -70,5 +70,22 @@
 		<true/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>TransifyGo requires access to your location while using the app to show your position on the map and coordinate active load pick-ups and deliveries.</string>
+		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+		<string>TransifyGo requires continuous background location access to track active trips, allowing load owners to view real-time transit updates even when the app is minimized or closed.</string>
+		<key>NSLocationAlwaysUsageDescription</key>
+		<string>TransifyGo requires continuous background location access to track active trips, allowing load owners to view real-time transit updates even when the app is minimized or closed.</string>
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>location</string>
+			<string>remote-notification</string>
+		</array>
+		<key>NSCameraUsageDescription</key>
+		<string>TransifyGo requires access to the camera to allow drivers and owners to capture and upload photos of loads, bills of lading, and proof of delivery.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>TransifyGo requires access to your photo library to select and upload stored documents, images of loads, or proof of delivery.</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>TransifyGo requires access to your microphone if you choose to record video confirmation as proof of load completion.</string>
 	</dict>
 </plist>

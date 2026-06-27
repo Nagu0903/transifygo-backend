@@ -87,8 +87,28 @@ class _PostLoadTabState extends State<PostLoadTab> {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
+        debugPrint('[POST-LOAD-TAB] isLocationServiceEnabled returned false. Verifying with a quick position check...');
+        try {
+          await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.low,
+              timeLimit: Duration(seconds: 2),
+            ),
+          );
+          serviceEnabled = true;
+        } on LocationServiceDisabledException {
+          serviceEnabled = false;
+        } catch (_) {
+          serviceEnabled = true;
+        }
+      }
+
+      if (!serviceEnabled) {
         if (mounted) {
-          SnackBarUtils.showWarning(context, 'Location services are disabled. Please enable them.');
+          SnackBarUtils.showWarning(context, 'Location services (GPS) are disabled. Opening settings...');
+          try {
+            await Geolocator.openLocationSettings();
+          } catch (_) {}
         }
         return;
       }
@@ -107,7 +127,7 @@ class _PostLoadTabState extends State<PostLoadTab> {
 
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
         Position position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high)
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.bestForNavigation)
         );
         
         String address = "My Current Location";

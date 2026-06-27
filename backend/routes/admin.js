@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Load = require('../models/Load');
+const Bid = require('../models/Bid');
 
 // Middleware to check DB connection
 const checkDB = (req, res, next) => {
@@ -135,6 +136,152 @@ router.put(['/users/:userId/block', '/loadowners/:userId/block'], checkDB, async
     res.json({ success: true, message: `User ${isBlocked ? 'blocked' : 'unblocked'} successfully` });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Failed to update user status' });
+  }
+});
+
+// GET /api/admin/bids - Fetch all pending / current bids
+router.get('/bids', checkDB, async (req, res) => {
+  try {
+    const bids = await Bid.find().sort({ createdAt: -1 }).lean();
+    
+    const populatedBids = await Promise.all(bids.map(async (bid) => {
+      const load = await Load.findById(bid.loadId).lean();
+      const driver = await User.findById(bid.driverId).lean();
+      return {
+        ...bid,
+        loadDetails: load ? {
+          id: load._id,
+          fromLocation: load.fromLocation,
+          toLocation: load.toLocation,
+          material: load.material,
+          price: load.price,
+          weight: load.weight,
+          truckType: load.truckType,
+          status: load.status,
+        } : null,
+        driverDetails: driver ? {
+          id: driver._id,
+          name: driver.name,
+          phone: driver.phone,
+          truckType: driver.truckType,
+          truckNumber: driver.truckNumber,
+          rating: driver.rating || "5.0"
+        } : null
+      };
+    }));
+
+    // Filter out bids that don't have load or driver details anymore
+    const validBids = populatedBids.filter(b => b.loadDetails && b.driverDetails);
+
+    res.json({ success: true, bids: validBids });
+  } catch (err) {
+    console.error('Fetch Admin Bids Error:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch bids' });
+  }
+});
+
+// POST /api/admin/bids/:bidId/accept - Accept a bid
+router.post('/bids/:bidId/accept', checkDB, async (req, res) => {
+  try {
+    const bidId = req.params.bidId;
+    const bid = await Bid.findById(bidId);
+    if (!bid) {
+      return res.status(404).json({ success: false, message: 'Bid not found' });
+    }
+
+    const load = await Load.findById(bid.loadId);
+    if (!load) {
+      return res.status(404).json({ success: false, message: 'Load not found' });
+    }
+
+    if (load.status === 'cancelled') {
+      return res.status(400).json({ success: false, message: 'This load has been cancelled and cannot be accepted.' });
+    }
+
+    const driver = await User.findById(bid.driverId);
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+
+    // Update current accepted bid
+    bid.status = 'Accepted';
+    await bid.save();
+
+    // Reject other bids on the same load
+    await Bid.updateMany(
+      { loadId: bid.loadId, _id: { $ne: bidId } },
+      { status: 'Rejected' }
+    );
+
+    // Update Load details
+    load.status = 'accepted';
+    load.driverId = driver._id.toString();
+    load.driverName = driver.name;
+    load.driverPhone = driver.phone;
+    // Set the price of the load to the bid amount
+    load.price = bid.bidAmount.toString();
+    await load.save();
+
+    // Notify Owner and Driver using existing sendPushNotification
+    const { sendPushNotification } = require('./notifications');
+    
+    // Notify Owner
+    const ownerBody = `Your load from ${load.fromLocation} to ${load.toLocation} has been matched with driver ${driver.name} (Bid: ₹${bid.bidAmount}).`;
+    sendPushNotification(
+      load.userId,
+      'Your load has been matched.',
+      ownerBody,
+      'load_accepted',
+      { loadId: load._id.toString() }
+    );
+
+    // Notify Driver
+    const driverBody = `Your bid of ₹${bid.bidAmount} for the load from ${load.fromLocation} to ${load.toLocation} has been accepted.`;
+    sendPushNotification(
+      driver._id.toString(),
+      'Your bid has been accepted.',
+      driverBody,
+      'bid_accepted',
+      { loadId: load._id.toString() }
+    );
+
+    res.json({ success: true, message: 'Bid accepted and load matched successfully' });
+  } catch (err) {
+    console.error('Accept Bid Error:', err);
+    res.status(500).json({ success: false, message: 'Failed to accept bid' });
+  }
+});
+
+// POST /api/admin/bids/:bidId/reject - Reject a bid
+router.post('/bids/:bidId/reject', checkDB, async (req, res) => {
+  try {
+    const bidId = req.params.bidId;
+    const bid = await Bid.findById(bidId);
+    if (!bid) {
+      return res.status(404).json({ success: false, message: 'Bid not found' });
+    }
+
+    bid.status = 'Rejected';
+    await bid.save();
+
+    // Notify Driver
+    const load = await Load.findById(bid.loadId);
+    const { sendPushNotification } = require('./notifications');
+    if (load) {
+      const driverBody = `Your bid of ₹${bid.bidAmount} for the load from ${load.fromLocation} to ${load.toLocation} has been rejected.`;
+      sendPushNotification(
+        bid.driverId,
+        'Your bid has been rejected.',
+        driverBody,
+        'bid_rejected',
+        { loadId: load._id.toString() }
+      );
+    }
+
+    res.json({ success: true, message: 'Bid rejected successfully' });
+  } catch (err) {
+    console.error('Reject Bid Error:', err);
+    res.status(500).json({ success: false, message: 'Failed to reject bid' });
   }
 });
 

@@ -48,6 +48,23 @@ class UpdatePaymentStatusRequested extends LoadEvent {
   UpdatePaymentStatusRequested(this.loadId, this.paymentData);
 }
 
+class PlaceBidRequested extends LoadEvent {
+  final String loadId;
+  final String driverId;
+  final double bidAmount;
+  final String message;
+
+  PlaceBidRequested({
+    required this.loadId,
+    required this.driverId,
+    required this.bidAmount,
+    required this.message,
+  });
+
+  @override
+  List<Object?> get props => [loadId, driverId, bidAmount, message];
+}
+
 // States
 abstract class LoadState extends Equatable {
   @override
@@ -79,6 +96,7 @@ class LoadBloc extends Bloc<LoadEvent, LoadState> {
     on<DeleteLoadRequested>(_onDeleteLoadRequested);
     on<CancelLoadRequested>(_onCancelLoadRequested);
     on<UpdatePaymentStatusRequested>(_onUpdatePaymentStatusRequested);
+    on<PlaceBidRequested>(_onPlaceBidRequested);
   }
 
   Future<void> _onPostLoadRequested(PostLoadRequested event, Emitter<LoadState> emit) async {
@@ -156,6 +174,21 @@ class LoadBloc extends Bloc<LoadEvent, LoadState> {
     try {
       await _loadRepository.updatePaymentStatus(event.loadId, event.paymentData);
       emit(LoadSuccess('Payment updated successfully'));
+    } catch (e) {
+      emit(LoadError(e.toString()));
+    }
+  }
+
+  Future<void> _onPlaceBidRequested(PlaceBidRequested event, Emitter<LoadState> emit) async {
+    emit(LoadLoading());
+    try {
+      await _loadRepository.placeBid(
+        event.loadId,
+        event.driverId,
+        event.bidAmount,
+        event.message,
+      );
+      emit(LoadSuccess('Bid placed successfully'));
     } catch (e) {
       emit(LoadError(e.toString()));
     }
