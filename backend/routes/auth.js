@@ -424,9 +424,102 @@ router.post('/firebase-token', checkDB, async (req, res) => {
       firebaseToken: customToken
     });
 
+// Firebase ID Token Login / Auto-Signup API
+router.post('/firebase-login', checkDB, async (req, res) => {
+  console.log('--- Firebase Token Login Request Started ---');
+  try {
+    const authHeader = req.headers.authorization;
+    // support passing token in headers or body
+    let idToken = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      idToken = authHeader.split('Bearer ')[1];
+    } else if (req.body.idToken) {
+      idToken = req.body.idToken;
+    }
+
+    if (!idToken) {
+      return res.status(401).json({ success: false, message: 'Authorization token or idToken is missing' });
+    }
+
+    // 1. Verify Firebase ID Token using Firebase Admin SDK
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const firebaseUid = decodedToken.uid;
+    const phone = decodedToken.phone_number;
+
+    if (!phone) {
+      return res.status(400).json({ success: false, message: 'Firebase token does not contain a verified phone number' });
+    }
+
+    // 2. Normalize phone number (remove country code prefix +91 or 91)
+    let normalizedPhone = phone;
+    if (phone.startsWith('+91') && phone.length === 13) {
+      normalizedPhone = phone.substring(3);
+    } else if (phone.startsWith('91') && phone.length === 12) {
+      normalizedPhone = phone.substring(2);
+    } else if (phone.startsWith('+')) {
+      // General E.164 normalization for other countries
+      normalizedPhone = phone.replace('+', '');
+    }
+
+    const { role } = req.body;
+    if (!role) {
+      return res.status(400).json({ success: false, message: 'Role is required for auto-registration checks' });
+    }
+
+    // 3. Check if phone is blocked
+    const blockedEntry = await BlockedPhone.findOne({ phone: normalizedPhone });
+    if (blockedEntry) {
+      return res.status(403).json({ success: false, message: `This phone number has been blocked: ${blockedEntry.reason}` });
+    }
+
+    // 4. Find or create user
+    let user = await User.findOne({ phone: normalizedPhone, role });
+    let isNewUser = false;
+
+    if (!user) {
+      isNewUser = true;
+      const name = 'User ' + normalizedPhone.substring(normalizedPhone.length - 4);
+      user = new User({
+        name,
+        phone: normalizedPhone,
+        password: 'TransifyGoOTP2026', // Secure default PIN/password for backward compatibility
+        role,
+        city: 'India',
+        truckType: role === 'Driver' ? 'Open' : undefined,
+        truckNumber: role === 'Driver' ? 'MH01AB1234' : undefined
+      });
+      await user.save();
+      console.log('✅ Auto-Signup successful via Firebase:', name, normalizedPhone);
+    } else {
+      if (user.isBlocked) {
+        return res.status(403).json({ success: false, message: 'Your account has been blocked.' });
+      }
+      console.log('✅ Login successful via Firebase:', user.name, normalizedPhone);
+    }
+
+    // 5. Mint JWT application token
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.json({
+      success: true,
+      message: isNewUser ? 'Registration successful' : 'Login successful',
+      token,
+      user: {
+        id: user._id,
+        fullName: user.name,
+        name: user.name,
+        phone: user.phone,
+        role: user.role
+      }
+    });
+
   } catch (err) {
-    console.error('Firebase Token Error:', err);
-    res.status(500).json({ success: false, message: 'Failed to generate Firebase token', error: err.message });
+    console.error('Firebase token verification failed:', err);
+    res.status(401).json({ success: false, message: 'Firebase authentication failed', error: err.message });
   }
 });
 

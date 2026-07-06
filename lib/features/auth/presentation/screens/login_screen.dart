@@ -30,6 +30,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   int? _resendToken;
   
   Timer? _timer;
+  Timer? _uiTimeoutTimer;
   int _secondsRemaining = 30;
   bool _canResend = false;
 
@@ -53,6 +54,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   @override
   void dispose() {
     _timer?.cancel();
+    _uiTimeoutTimer?.cancel();
     _phoneController.dispose();
     for (var controller in _otpControllers) {
       controller.dispose();
@@ -95,11 +97,22 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       _isLoading = true;
     });
 
+    _uiTimeoutTimer?.cancel();
+    _uiTimeoutTimer = Timer(const Duration(seconds: 45), () {
+      if (mounted && _isLoading) {
+        setState(() {
+          _isLoading = false;
+        });
+        SnackBarUtils.showError(context, 'Verification request timed out. Please check your network and try again.');
+      }
+    });
+
     try {
       await OtpService.provider.sendOtp(
         phone: phone,
         forceResendToken: _resendToken,
         onCodeSent: (String verificationId, int? resendToken) {
+          _uiTimeoutTimer?.cancel();
           setState(() {
             _verificationId = verificationId;
             _resendToken = resendToken;
@@ -111,6 +124,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           _startResendTimer();
         },
         onFailed: (String errorMessage) {
+          _uiTimeoutTimer?.cancel();
           setState(() {
             _isLoading = false;
           });
@@ -120,6 +134,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         },
       );
     } catch (e) {
+      _uiTimeoutTimer?.cancel();
       setState(() {
         _isLoading = false;
       });
