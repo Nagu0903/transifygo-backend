@@ -54,4 +54,7 @@ const loadSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+loadSchema.index({ fromLat: 1, fromLng: 1 });
+
 module.exports = mongoose.model('Load', loadSchema);
+

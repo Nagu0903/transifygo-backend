@@ -4,6 +4,12 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const admin = require('firebase-admin');
+const Otp = require('../models/Otp');
+const BlockedPhone = require('../models/BlockedPhone');
+const OtpLog = require('../models/OtpLog');
+const bcrypt = require('bcrypt');
+const crypto = require('crypto');
+const axios = require('axios');
 
 // Middleware to check DB connection
 const checkDB = (req, res, next) => {
@@ -15,6 +21,203 @@ const checkDB = (req, res, next) => {
   }
   next();
 };
+
+// Send OTP API using MSG91 with Rate Limiting
+router.post('/send-otp', checkDB, async (req, res) => {
+  console.log('--- Send OTP Request Started ---');
+  try {
+    const { phone } = req.body;
+    if (!phone || phone.length !== 10) {
+      return res.status(400).json({ success: false, message: 'Invalid 10-digit phone number' });
+    }
+
+    // 1. Check if phone is blocked in BlockedPhone collection
+    const blockedEntry = await BlockedPhone.findOne({ phone });
+    if (blockedEntry) {
+      const log = new OtpLog({ phone, action: 'BLOCKED', ip: req.ip, userAgent: req.headers['user-agent'], details: `Blocked attempt: ${blockedEntry.reason}` });
+      await log.save();
+      return res.status(403).json({ success: false, message: `This phone number has been blocked: ${blockedEntry.reason}` });
+    }
+
+    // 2. Check if a User is blocked
+    const existingUser = await User.findOne({ phone });
+    if (existingUser && existingUser.isBlocked) {
+      const log = new OtpLog({ phone, action: 'BLOCKED', ip: req.ip, userAgent: req.headers['user-agent'], details: 'User account is blocked' });
+      await log.save();
+      return res.status(403).json({ success: false, message: 'Your account has been blocked.' });
+    }
+
+    // 3. Enforce Rate Limit: Max 5 OTP requests per hour per number
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const requestCount = await OtpLog.countDocuments({ 
+      phone, 
+      action: 'SEND_OTP', 
+      timestamp: { $gte: oneHourAgo } 
+    });
+
+    if (requestCount >= 5) {
+      return res.status(429).json({ 
+        success: false, 
+        message: 'Too many OTP requests. Maximum 5 requests per hour. Please try again later.' 
+      });
+    }
+
+    // 4. Generate secure 6-digit OTP
+    const otp = crypto.randomInt(100000, 1000000).toString();
+
+    // 5. Hash OTP and store in DB
+    const salt = await bcrypt.genSalt(10);
+    const otpHash = await bcrypt.hash(otp, salt);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
+
+    await Otp.findOneAndUpdate(
+      { phone }, 
+      { otpHash, attempts: 0, expiresAt }, 
+      { upsert: true, new: true }
+    );
+
+    // 6. Log the OTP send event
+    const log = new OtpLog({ phone, action: 'SEND_OTP', ip: req.ip, userAgent: req.headers['user-agent'] });
+    await log.save();
+
+    // 7. Deliver OTP via MSG91 (or fallback)
+    const authKey = process.env.MSG91_AUTH_KEY;
+    const templateId = process.env.MSG91_TEMPLATE_ID;
+
+    if (authKey && templateId) {
+      try {
+        await axios.post('https://control.msg91.com/api/v5/flow/', {
+          template_id: templateId,
+          recipients: [
+            {
+              mobiles: `91${phone}`,
+              otp: otp
+            }
+          ]
+        }, {
+          headers: {
+            'authkey': authKey,
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log(`[MSG91] OTP sent to 91${phone}`);
+      } catch (err) {
+        console.error('[MSG91] SMS delivery failed, falling back to console log:', err.response ? err.response.data : err.message);
+        console.log(`[DEV ONLY] Generated OTP for 91${phone} is: ${otp}`);
+      }
+    } else {
+      console.log(`[DEV ONLY] Generated OTP for 91${phone} is: ${otp}`);
+    }
+
+    res.json({ success: true, message: 'OTP sent successfully' });
+
+  } catch (err) {
+    console.error('Send OTP Error:', err);
+    res.status(500).json({ success: false, message: 'Server error during OTP request', error: err.message });
+  }
+});
+
+// Verify OTP and Authenticate User (Login / Auto-Signup)
+router.post('/verify-otp', checkDB, async (req, res) => {
+  console.log('--- Verify OTP Request Started ---');
+  try {
+    const { phone, otp, role } = req.body;
+    if (!phone || !otp || !role) {
+      return res.status(400).json({ success: false, message: 'Phone, OTP, and role are required' });
+    }
+
+    // 1. Fetch OTP record
+    const otpDoc = await Otp.findOne({ phone });
+    if (!otpDoc) {
+      return res.status(400).json({ success: false, message: 'OTP expired or not found. Please request a new OTP.' });
+    }
+
+    // 2. Prevent brute-force (Max 5 attempts)
+    if (otpDoc.attempts >= 5) {
+      await Otp.deleteOne({ phone });
+      return res.status(400).json({ success: false, message: 'Maximum verification attempts exceeded. Please request a new OTP.' });
+    }
+
+    // 3. Verify OTP code matches hash
+    const isMatch = await bcrypt.compare(otp, otpDoc.otpHash);
+    if (!isMatch) {
+      otpDoc.attempts += 1;
+      await otpDoc.save();
+
+      const log = new OtpLog({ 
+        phone, 
+        action: 'VERIFY_FAILED', 
+        ip: req.ip, 
+        userAgent: req.headers['user-agent'], 
+        details: `Incorrect code attempt. ${5 - otpDoc.attempts} remaining.` 
+      });
+      await log.save();
+
+      return res.status(400).json({ 
+        success: false, 
+        message: `Invalid OTP. ${5 - otpDoc.attempts} verification attempts remaining.` 
+      });
+    }
+
+    // 4. Verification Successful! Delete OTP record
+    await Otp.deleteOne({ phone });
+
+    // 5. Log verification success
+    const log = new OtpLog({ phone, action: 'VERIFY_SUCCESS', ip: req.ip, userAgent: req.headers['user-agent'] });
+    await log.save();
+
+    // 6. Login existing user or auto-signup new user
+    let user = await User.findOne({ phone, role });
+    let isNewUser = false;
+
+    if (!user) {
+      isNewUser = true;
+      // Auto register new user
+      const name = 'User ' + phone.substring(phone.length - 4);
+      user = new User({
+        name,
+        phone,
+        password: 'TransifyGoOTP2026', // Secure default password/PIN for backward compatibility
+        role,
+        city: 'India',
+        truckType: role === 'Driver' ? 'Open' : undefined,
+        truckNumber: role === 'Driver' ? 'MH01AB1234' : undefined
+      });
+      await user.save();
+      console.log('✅ Auto-Signup successful for:', name, phone);
+    } else {
+      // If user exists, verify they are not blocked
+      if (user.isBlocked) {
+        return res.status(403).json({ success: false, message: 'Your account has been blocked.' });
+      }
+      console.log('✅ Login successful for:', user.name, phone);
+    }
+
+    // 7. Mint JWT Token
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.json({
+      success: true,
+      message: isNewUser ? 'Registration successful' : 'Login successful',
+      token,
+      user: {
+        id: user._id,
+        fullName: user.name,
+        name: user.name,
+        phone: user.phone,
+        role: user.role
+      }
+    });
+
+  } catch (err) {
+    console.error('Verify OTP Error:', err);
+    res.status(500).json({ success: false, message: 'Server error during OTP verification', error: err.message });
+  }
+});
 
 // Signup API
 router.post('/signup', checkDB, async (req, res) => {
@@ -30,6 +233,15 @@ router.post('/signup', checkDB, async (req, res) => {
 
     if (!finalName || !phone || !finalPassword || !role) {
       return res.status(400).json({ success: false, message: 'Missing required fields: name/fullName, phone, password/pin, and role are required.' });
+    }
+
+    // Secure Admin signup
+    if (role === 'Admin') {
+      const adminSecret = req.headers['x-admin-secret'] || req.body.adminSecret;
+      const expectedSecret = process.env.ADMIN_SIGNUP_SECRET || 'transify_admin_secret_2026';
+      if (adminSecret !== expectedSecret) {
+        return res.status(403).json({ success: false, message: 'Forbidden. Unauthorized registration of Admin role.' });
+      }
     }
 
     // Check if user already exists

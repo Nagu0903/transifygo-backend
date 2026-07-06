@@ -4,6 +4,14 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Load = require('../models/Load');
 const Bid = require('../models/Bid');
+const Assignment = require('../models/Assignment');
+const BlockedPhone = require('../models/BlockedPhone');
+const OtpLog = require('../models/OtpLog');
+const { authenticateToken, requireRole } = require('../middleware/auth');
+
+// Apply admin protection middleware globally to this router
+router.use(authenticateToken);
+router.use(requireRole(['Admin']));
 
 // Middleware to check DB connection
 const checkDB = (req, res, next) => {
@@ -15,6 +23,70 @@ const checkDB = (req, res, next) => {
   }
   next();
 };
+
+// GET /api/admin/otp-logs - Fetch recent OTP login logs and history
+router.get('/otp-logs', checkDB, async (req, res) => {
+  try {
+    const logs = await OtpLog.find().sort({ timestamp: -1 }).limit(100);
+    res.json({ success: true, logs });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to fetch OTP logs' });
+  }
+});
+
+// GET /api/admin/blocked-phones - Fetch list of blocked suspicious numbers
+router.get('/blocked-phones', checkDB, async (req, res) => {
+  try {
+    const blocked = await BlockedPhone.find().sort({ createdAt: -1 });
+    res.json({ success: true, blocked });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to fetch blocked phones' });
+  }
+});
+
+// POST /api/admin/block-phone - Block a suspicious number
+router.post('/block-phone', checkDB, async (req, res) => {
+  try {
+    const { phone, reason } = req.body;
+    if (!phone || phone.length !== 10) {
+      return res.status(400).json({ success: false, message: 'Invalid 10-digit phone number' });
+    }
+
+    // Add to BlockedPhone collection
+    await BlockedPhone.findOneAndUpdate(
+      { phone },
+      { reason: reason || 'Suspicious login activity' },
+      { upsert: true, new: true }
+    );
+
+    // Also toggle block on existing User if exists
+    await User.updateMany({ phone }, { isBlocked: true });
+
+    res.json({ success: true, message: `Phone number ${phone} blocked successfully` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to block phone number' });
+  }
+});
+
+// POST /api/admin/unblock-phone - Unblock a number
+router.post('/unblock-phone', checkDB, async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ success: false, message: 'Phone number is required' });
+    }
+
+    // Remove from BlockedPhone
+    await BlockedPhone.deleteOne({ phone });
+
+    // Also unblock existing User if exists
+    await User.updateMany({ phone }, { isBlocked: false });
+
+    res.json({ success: true, message: `Phone number ${phone} unblocked successfully` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to unblock phone number' });
+  }
+});
 
 // 1. Professional Admin Stats
 // GET /api/admin/stats
@@ -145,8 +217,14 @@ router.get('/bids', checkDB, async (req, res) => {
     const bids = await Bid.find().sort({ createdAt: -1 }).lean();
     
     const populatedBids = await Promise.all(bids.map(async (bid) => {
-      const load = await Load.findById(bid.loadId).lean();
-      const driver = await User.findById(bid.driverId).lean();
+      let load = null;
+      if (bid.loadId && mongoose.Types.ObjectId.isValid(bid.loadId)) {
+        load = await Load.findById(bid.loadId).lean();
+      }
+      let driver = null;
+      if (bid.driverId && mongoose.Types.ObjectId.isValid(bid.driverId)) {
+        driver = await User.findById(bid.driverId).lean();
+      }
       return {
         ...bid,
         loadDetails: load ? {
@@ -222,6 +300,19 @@ router.post('/bids/:bidId/accept', checkDB, async (req, res) => {
     load.price = bid.bidAmount.toString();
     await load.save();
 
+    // Create Assignment log
+    const assignment = new Assignment({
+      loadId: load._id.toString(),
+      driverId: driver._id.toString(),
+      driverName: driver.name,
+      driverPhone: driver.phone
+    });
+    await assignment.save();
+
+    if (process.env.IS_TESTING === 'true') {
+      console.log(`[DEBUG-TEST] Assignment created for load ${load._id} and driver ${driver._id}: assignmentId=${assignment._id}`);
+    }
+
     // Notify Owner and Driver using existing sendPushNotification
     const { sendPushNotification } = require('./notifications');
     
@@ -245,7 +336,7 @@ router.post('/bids/:bidId/accept', checkDB, async (req, res) => {
       { loadId: load._id.toString() }
     );
 
-    res.json({ success: true, message: 'Bid accepted and load matched successfully' });
+    res.json({ success: true, message: 'Bid accepted and load matched successfully', assignment });
   } catch (err) {
     console.error('Accept Bid Error:', err);
     res.status(500).json({ success: false, message: 'Failed to accept bid' });
@@ -282,6 +373,137 @@ router.post('/bids/:bidId/reject', checkDB, async (req, res) => {
   } catch (err) {
     console.error('Reject Bid Error:', err);
     res.status(500).json({ success: false, message: 'Failed to reject bid' });
+  }
+});
+
+// 8. Edit any load (For Admin)
+// PUT /api/admin/loads/:loadId
+router.put('/loads/:loadId', checkDB, async (req, res) => {
+  try {
+    const loadId = req.params.loadId;
+    const updateData = req.body;
+
+    const load = await Load.findByIdAndUpdate(loadId, updateData, { new: true });
+    if (!load) {
+      return res.status(404).json({ success: false, message: 'Load not found' });
+    }
+
+    console.log(`✅ Load ${loadId} updated by Admin`);
+    res.json({ success: true, message: 'Load updated successfully by Admin', load });
+  } catch (err) {
+    console.error('Admin Edit Load Error:', err);
+    res.status(500).json({ success: false, message: 'Failed to edit load', error: err.message });
+  }
+});
+
+// 9. Add new load (For Admin)
+// POST /api/admin/loads/create
+router.post('/loads/create', checkDB, async (req, res) => {
+  try {
+    const { 
+      userId, 
+      fullName, 
+      phone, 
+      fromLocation, 
+      fromDistrict,
+      fromState,
+      fromLat,
+      fromLng,
+      toLocation, 
+      toDistrict,
+      toState,
+      toLat,
+      toLng,
+      truckType, 
+      material, 
+      price, 
+      weight, 
+      notes, 
+      distance 
+    } = req.body;
+
+    if (!userId || !fromLocation || !toLocation || !price) {
+      return res.status(400).json({ success: false, message: 'Missing required fields' });
+    }
+
+    const newLoad = new Load({
+      userId,
+      fullName,
+      phone,
+      fromLocation,
+      fromDistrict,
+      fromState,
+      fromLat,
+      fromLng,
+      toLocation,
+      toDistrict,
+      toState,
+      toLat,
+      toLng,
+      truckType,
+      material,
+      price,
+      weight,
+      notes,
+      distance,
+      status: 'pending',
+      isActive: true,
+      visibleToDrivers: true
+    });
+
+    await newLoad.save();
+    console.log('✅ Load Created by Admin:', newLoad._id);
+    res.status(201).json({ success: true, message: 'Load posted successfully by Admin', load: newLoad });
+  } catch (err) {
+    console.error('Admin Create Load Error:', err);
+    res.status(500).json({ success: false, message: 'Failed to create load', error: err.message });
+  }
+});
+
+// 10. Direct assign load to driver (For Admin)
+// POST /api/admin/loads/:loadId/assign
+router.post('/loads/:loadId/assign', checkDB, async (req, res) => {
+  try {
+    const loadId = req.params.loadId;
+    const { driverId } = req.body;
+
+    if (!driverId) {
+      return res.status(400).json({ success: false, message: 'Missing driverId' });
+    }
+
+    const load = await Load.findById(loadId);
+    if (!load) {
+      return res.status(404).json({ success: false, message: 'Load not found' });
+    }
+
+    const driver = await User.findById(driverId);
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+
+    load.status = 'accepted';
+    load.driverId = driver._id.toString();
+    load.driverName = driver.name;
+    load.driverPhone = driver.phone;
+    await load.save();
+
+    // Create Assignment log
+    const assignment = new Assignment({
+      loadId: load._id.toString(),
+      driverId: driver._id.toString(),
+      driverName: driver.name,
+      driverPhone: driver.phone
+    });
+    await assignment.save();
+
+    if (process.env.IS_TESTING === 'true') {
+      console.log(`[DEBUG-TEST] Assignment created via direct assign for load ${load._id} and driver ${driver._id}: assignmentId=${assignment._id}`);
+    }
+
+    res.json({ success: true, message: 'Driver assigned successfully', load, assignment });
+  } catch (err) {
+    console.error('Direct Assign Error:', err);
+    res.status(500).json({ success: false, message: 'Failed to assign driver', error: err.message });
   }
 });
 

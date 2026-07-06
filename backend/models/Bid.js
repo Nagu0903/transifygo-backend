@@ -13,4 +13,5 @@ const bidSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('Bid', bidSchema);
+const collectionName = process.env.IS_TESTING === 'true' ? 'bids_test' : 'bids';
+module.exports = mongoose.model('Bid', bidSchema, collectionName);

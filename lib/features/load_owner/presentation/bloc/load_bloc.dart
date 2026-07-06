@@ -13,7 +13,15 @@ class PostLoadRequested extends LoadEvent {
   PostLoadRequested(this.loadData);
 }
 
-class FetchPendingLoadsRequested extends LoadEvent {}
+class FetchPendingLoadsRequested extends LoadEvent {
+  final double? latitude;
+  final double? longitude;
+
+  FetchPendingLoadsRequested({this.latitude, this.longitude});
+
+  @override
+  List<Object?> get props => [latitude, longitude];
+}
 
 class FetchOwnerLoadsRequested extends LoadEvent {
   final String ownerId;
@@ -112,7 +120,10 @@ class LoadBloc extends Bloc<LoadEvent, LoadState> {
   Future<void> _onFetchPendingLoadsRequested(FetchPendingLoadsRequested event, Emitter<LoadState> emit) async {
     emit(LoadLoading());
     try {
-      final loads = await _loadRepository.fetchPendingLoads();
+      final loads = await _loadRepository.fetchPendingLoads(
+        latitude: event.latitude,
+        longitude: event.longitude,
+      );
       emit(LoadSuccess('Loads fetched successfully', loads: loads));
     } catch (e) {
       emit(LoadError(e.toString()));

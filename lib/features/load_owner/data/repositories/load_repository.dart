@@ -14,9 +14,13 @@ class LoadRepository {
   }
 
   // 2. Fetch all pending loads (For Driver)
-  Future<List<Map<String, dynamic>>> fetchPendingLoads() async {
+  Future<List<Map<String, dynamic>>> fetchPendingLoads({double? latitude, double? longitude}) async {
     try {
-      final response = await _apiService.get('/loads');
+      String path = '/loads';
+      if (latitude != null && longitude != null) {
+        path += '?latitude=$latitude&longitude=$longitude';
+      }
+      final response = await _apiService.get(path);
       if (response.data['success']) {
         final List loads = response.data['loads'];
         return loads.map((e) => e as Map<String, dynamic>).toList();

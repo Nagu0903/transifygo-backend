@@ -16,6 +16,21 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Staging environment logging
+if (process.env.IS_TESTING === 'true') {
+  app.use((req, res, next) => {
+    console.log(`[DEBUG-TEST] API Request: ${req.method} ${req.originalUrl}`);
+    console.log(`[DEBUG-TEST] Request Headers:`, JSON.stringify(req.headers));
+    console.log(`[DEBUG-TEST] Request Body:`, JSON.stringify(req.body));
+    next();
+  });
+
+  // Enable Mongoose debug query logs
+  mongoose.set('debug', (collectionName, method, query, doc, options) => {
+    console.log(`[DEBUG-TEST] MongoDB Query: ${collectionName}.${method}(${JSON.stringify(query)})`);
+  });
+}
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/loads', loadRoutes);
@@ -28,6 +43,16 @@ app.use('/api/bids', bidRoutes);
 // Root endpoint for health check
 app.get('/', (req, res) => {
   res.send('Transify Backend is Running');
+});
+
+// Lightweight health endpoint
+app.get('/health', async (req, res) => {
+  const state = mongoose.connection.readyState;
+  const states = ['Disconnected', 'Connected', 'Connecting', 'Disconnecting'];
+  res.json({
+    status: 'ok',
+    database: state === 1 ? 'connected' : states[state]
+  });
 });
 
 // Test Database Connection
@@ -46,7 +71,16 @@ app.get('/api/test-db', async (req, res) => {
 });
 
 // MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI;
+let MONGODB_URI = process.env.MONGODB_URI;
+
+if (process.env.IS_TESTING === 'true') {
+  if (MONGODB_URI.includes('/transify?')) {
+    MONGODB_URI = MONGODB_URI.replace('/transify?', '/transifygo_test?');
+  } else if (MONGODB_URI.includes('/transify')) {
+    MONGODB_URI = MONGODB_URI.replace('/transify', '/transifygo_test');
+  }
+  console.log('[DEBUG-TEST] Running in TEST mode. Redirected database connection.');
+}
 
 mongoose.connect(MONGODB_URI, {
   serverSelectionTimeoutMS: 5000, // Fail fast if no connection

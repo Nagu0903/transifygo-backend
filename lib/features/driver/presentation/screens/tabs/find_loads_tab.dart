@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:transify_app/core/constants/app_colors.dart';
 import 'package:transify_app/core/localization/language_provider.dart';
 import 'package:transify_app/core/services/session_service.dart';
@@ -27,9 +28,34 @@ class _FindLoadsTabState extends State<FindLoadsTab> {
     _refreshTimer = Timer.periodic(const Duration(seconds: 15), (timer) => _fetchPending());
   }
 
-  void _fetchPending() {
+  void _fetchPending() async {
+    if (!mounted) return;
+    double? lat;
+    double? lng;
+    try {
+      final lastPos = await Geolocator.getLastKnownPosition();
+      if (lastPos != null) {
+        lat = lastPos.latitude;
+        lng = lastPos.longitude;
+      } else {
+        final permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+          final currentPos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.low,
+              timeLimit: Duration(seconds: 2),
+            ),
+          );
+          lat = currentPos.latitude;
+          lng = currentPos.longitude;
+        }
+      }
+    } catch (e) {
+      debugPrint('[DRIVER] Failed to get coordinates for filtering: $e');
+    }
+
     if (mounted) {
-      context.read<LoadBloc>().add(FetchPendingLoadsRequested());
+      context.read<LoadBloc>().add(FetchPendingLoadsRequested(latitude: lat, longitude: lng));
     }
   }
 

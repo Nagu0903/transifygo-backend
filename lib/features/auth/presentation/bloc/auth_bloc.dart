@@ -30,6 +30,15 @@ class SignupRequested extends AuthEvent {
 
 class LogoutRequested extends AuthEvent {}
 
+class OtpLoginSucceeded extends AuthEvent {
+  final String token;
+  final UserModel user;
+  OtpLoginSucceeded({required this.token, required this.user});
+
+  @override
+  List<Object?> get props => [token, user];
+}
+
 class ResetPasswordRequested extends AuthEvent {
   final String phone;
   final String role;
@@ -71,6 +80,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<SignupRequested>(_onSignupRequested);
     on<LogoutRequested>(_onLogoutRequested);
     on<ResetPasswordRequested>(_onResetPasswordRequested);
+    on<OtpLoginSucceeded>(_onOtpLoginSucceeded);
   }
 
   Future<void> _onLoginRequested(LoginRequested event, Emitter<AuthState> emit) async {
@@ -176,6 +186,31 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       }
     } catch (e) {
       emit(AuthError(e.toString()));
+    } finally {
+      if (state is AuthLoading) {
+        emit(AuthInitial());
+      }
+    }
+  }
+
+  Future<void> _onOtpLoginSucceeded(OtpLoginSucceeded event, Emitter<AuthState> emit) async {
+    emit(AuthLoading());
+    try {
+      await SessionService.saveSession(
+        uid: event.user.id!,
+        role: event.user.role,
+        name: event.user.name,
+        phone: event.user.phone,
+        fullName: event.user.fullName,
+        token: event.token,
+      );
+
+      // Update notification token
+      await NotificationService.updateToken();
+
+      emit(AuthAuthenticated(role: event.user.role, uid: event.user.id!));
+    } catch (e) {
+      emit(AuthError('Session save failed: $e'));
     } finally {
       if (state is AuthLoading) {
         emit(AuthInitial());

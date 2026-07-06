@@ -100,4 +100,51 @@ class AdminRepository {
       rethrow;
     }
   }
+
+  Future<List<Map<String, dynamic>>> fetchOtpLogs() async {
+    try {
+      final response = await _apiService.get('/admin/otp-logs');
+      if (response.data['success']) {
+        final List logs = response.data['logs'];
+        return logs.map((e) => e as Map<String, dynamic>).toList();
+      }
+      return [];
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchBlockedPhones() async {
+    try {
+      final response = await _apiService.get('/admin/blocked-phones');
+      if (response.data['success']) {
+        final List blocked = response.data['blocked'];
+        return blocked.map((e) => e as Map<String, dynamic>).toList();
+      }
+      return [];
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> blockPhone(String phone, String reason) async {
+    try {
+      await _apiService.post('/admin/block-phone', {
+        'phone': phone,
+        'reason': reason,
+      });
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> unblockPhone(String phone) async {
+    try {
+      await _apiService.post('/admin/unblock-phone', {
+        'phone': phone,
+      });
+    } catch (e) {
+      rethrow;
+    }
+  }
 }

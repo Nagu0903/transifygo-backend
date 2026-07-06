@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:transify_app/core/constants/app_colors.dart';
 import 'package:transify_app/core/services/session_service.dart';
 import 'package:transify_app/features/auth/presentation/screens/role_selection_screen.dart';
+import 'package:transify_app/features/auth/presentation/screens/language_selection_screen.dart';
 import 'package:transify_app/features/load_owner/presentation/screens/owner_dashboard_screen.dart';
 import 'package:transify_app/features/driver/presentation/screens/driver_dashboard_screen.dart';
 import 'package:transify_app/features/admin/presentation/screens/admin_dashboard_screen.dart';
@@ -42,6 +43,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   Future<void> _checkSession() async {
     await Future.delayed(const Duration(seconds: 3));
     if (!mounted) return;
+
+    final onboardingCompleted = await SessionService.isOnboardingCompleted();
+    if (!mounted) return;
+
+    if (!onboardingCompleted) {
+      _navigate(const LanguageSelectionScreen());
+      return;
+    }
 
     final isLoggedIn = await SessionService.isLoggedIn();
     if (!mounted) return;

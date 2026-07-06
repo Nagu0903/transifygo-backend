@@ -8,6 +8,17 @@ class SessionService {
   static const String _keyUserPhone = 'user_phone';
   static const String _keyUserFullName = 'user_fullname';
   static const String _keyToken = 'jwt_token';
+  static const String _keyOnboardingCompleted = 'onboarding_completed';
+
+  static Future<bool> isOnboardingCompleted() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyOnboardingCompleted) ?? false;
+  }
+
+  static Future<void> setOnboardingCompleted() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyOnboardingCompleted, true);
+  }
 
   static Future<void> saveSession({
     required String uid,

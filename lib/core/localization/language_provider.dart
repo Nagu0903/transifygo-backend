@@ -1,13 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LanguageProvider extends ChangeNotifier {
   Locale _currentLocale = const Locale('en');
 
+  LanguageProvider() {
+    _loadSavedLanguage();
+  }
+
   Locale get currentLocale => _currentLocale;
 
-  void changeLanguage(String languageCode) {
+  Future<void> _loadSavedLanguage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedCode = prefs.getString('selected_language_code');
+      if (savedCode != null) {
+        _currentLocale = Locale(savedCode);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[LanguageProvider] Error loading saved language: $e');
+    }
+  }
+
+  Future<void> changeLanguage(String languageCode) async {
     _currentLocale = Locale(languageCode);
     notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('selected_language_code', languageCode);
+    } catch (e) {
+      debugPrint('[LanguageProvider] Error saving language: $e');
+    }
   }
 
   String translate(String key) {
@@ -30,6 +54,8 @@ class LanguageProvider extends ChangeNotifier {
     'driver': 'Driver',
     'admin': 'Admin',
     'post_load': 'Post Load',
+    'post_load_desc': 'Post your load requirements and find verified transporters quickly.',
+    'driver_desc': 'Find nearby loads, bid for loads, manage trips, and earn more every day.',
     'my_loads': 'My Loads',
     'profile': 'Profile',
     'from': 'From Location',
@@ -76,6 +102,8 @@ class LanguageProvider extends ChangeNotifier {
     'driver': 'ಚಾಲಕ',
     'admin': 'ನಿರ್ವಾಹಕ',
     'post_load': 'ಲೋಡ್ ಪೋಸ್ಟ್ ಮಾಡಿ',
+    'post_load_desc': 'ನಿಮ್ಮ ಲೋಡ್ ಅವಶ್ಯಕತೆಗಳನ್ನು ಪೋಸ್ಟ್ ಮಾಡಿ ಮತ್ತು ಪರಿಶೀಲಿಸಿದ ಸಾಗಣೆದಾರರನ್ನು ತ್ವರಿತವಾಗಿ ಹುಡುಕಿ.',
+    'driver_desc': 'ಹತ್ತಿರದ ಲೋಡ್‌ಗಳನ್ನು ಹುಡುಕಿ, ಲೋಡ್‌ಗಳಿಗೆ ಬಿಡ್ ಮಾಡಿ, ಪ್ರವಾಸಗಳನ್ನು ನಿರ್ವಹಿಸಿ ಮತ್ತು ಪ್ರತಿದಿನ ಹೆಚ್ಚು ಗಳಿಸಿ.',
     'my_loads': 'ನನ್ನ ಲೋಡ್‌ಗಳು',
     'profile': 'ಪ್ರೊಫೈಲ್',
     'from': 'ಎಲ್ಲಿಂದ',

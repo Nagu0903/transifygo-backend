@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const admin = require('firebase-admin');
+const { authenticateToken } = require('../middleware/auth');
 
 // Initialize Firebase Admin safely
 try {
@@ -188,8 +189,11 @@ const checkDB = (req, res, next) => {
 };
 
 // 1. Get user notifications
-router.get('/:userId', checkDB, async (req, res) => {
+router.get('/:userId', checkDB, authenticateToken, async (req, res) => {
   try {
+    if (req.user.role !== 'Admin' && req.params.userId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Forbidden. Cannot access other users\' notifications.' });
+    }
     const notifications = await Notification.find({ userId: req.params.userId })
       .sort({ createdAt: -1 })
       .limit(50);
@@ -200,9 +204,17 @@ router.get('/:userId', checkDB, async (req, res) => {
 });
 
 // 2. Mark as read
-router.put('/read/:notificationId', checkDB, async (req, res) => {
+router.put('/read/:notificationId', checkDB, authenticateToken, async (req, res) => {
   try {
-    await Notification.findByIdAndUpdate(req.params.notificationId, { isRead: true });
+    const notification = await Notification.findById(req.params.notificationId);
+    if (!notification) {
+      return res.status(404).json({ success: false, message: 'Notification not found' });
+    }
+    if (req.user.role !== 'Admin' && notification.userId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You do not own this notification.' });
+    }
+    notification.isRead = true;
+    await notification.save();
     res.json({ success: true, message: 'Marked as read' });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Update failed' });
@@ -210,10 +222,14 @@ router.put('/read/:notificationId', checkDB, async (req, res) => {
 });
 
 // 3. Update FCM Token
-router.post('/token', checkDB, async (req, res) => {
+router.post('/token', checkDB, authenticateToken, async (req, res) => {
   try {
     const { userId, fcmToken } = req.body;
     if (!userId || !fcmToken) return res.status(400).json({ success: false, message: 'Missing fields' });
+    
+    if (req.user.role !== 'Admin' && userId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Forbidden. Cannot update FCM token for another user.' });
+    }
     
     await User.findByIdAndUpdate(userId, { fcmToken });
     res.json({ success: true, message: 'Token updated' });

@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const Tracking = require('../models/Tracking');
 const admin = require('firebase-admin');
+const { authenticateToken, requireRole } = require('../middleware/auth');
 
 // Helper to update Firestore real-time trip document in collection 'activeTrips'
 const updateFirestoreTrip = async (tripId, data) => {
@@ -57,7 +58,7 @@ const checkDB = (req, res, next) => {
 
 // 1. Start Trip Tracking
 // POST /api/tracking/start
-router.post('/start', checkDB, async (req, res) => {
+router.post('/start', checkDB, authenticateToken, requireRole(['Driver', 'Admin']), async (req, res) => {
   console.log('--- Start Trip Tracking Request ---');
   try {
     const { loadId, driverId, latitude, longitude, ownerId } = req.body;
@@ -66,19 +67,23 @@ router.post('/start', checkDB, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
-    // Try to fetch ownerId dynamically if not supplied in the request body
-    let finalOwnerId = ownerId;
-    if (!finalOwnerId) {
-      try {
-        const Load = require('../models/Load');
-        const load = await Load.findById(loadId);
-        if (load) {
-          finalOwnerId = load.userId;
-        }
-      } catch (loadErr) {
-        console.error('[BACKEND-WARNING] Failed to fetch load to retrieve ownerId:', loadErr.message);
-      }
+    // Role check: Driver can only start tracking for themselves
+    if (req.user.role !== 'Admin' && driverId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Forbidden. Cannot start tracking for another driver.' });
     }
+
+    // Verify driver is assigned to the load
+    const Load = require('../models/Load');
+    const load = await Load.findById(loadId);
+    if (!load) {
+      return res.status(404).json({ success: false, message: 'Load not found' });
+    }
+    if (req.user.role !== 'Admin' && load.driverId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You are not the driver assigned to this load.' });
+    }
+
+    // Try to fetch ownerId dynamically if not supplied in the request body
+    let finalOwnerId = ownerId || load.userId;
 
     // Upsert tracking details: create or update existing trip record for this load in MongoDB
     const tracking = await Tracking.findOneAndUpdate(
@@ -119,7 +124,7 @@ router.post('/start', checkDB, async (req, res) => {
 
 // 2. Update Live Location
 // POST /api/tracking/update
-router.post('/update', checkDB, async (req, res) => {
+router.post('/update', checkDB, authenticateToken, requireRole(['Driver', 'Admin']), async (req, res) => {
   try {
     const { loadId, latitude, longitude, heading, speed, timestamp } = req.body;
 
@@ -135,6 +140,11 @@ router.post('/update', checkDB, async (req, res) => {
 
     if (tracking.tripStatus !== 'active') {
       return res.status(400).json({ success: false, message: 'Cannot update location for an inactive trip' });
+    }
+
+    // Role check: Ensure the caller is the driver assigned to the tracking session
+    if (req.user.role !== 'Admin' && tracking.driverId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You are not the driver assigned to this trip.' });
     }
 
     tracking.latitude = Number(latitude);
@@ -163,7 +173,7 @@ router.post('/update', checkDB, async (req, res) => {
 
 // 3. Stop Trip Tracking
 // POST /api/tracking/stop
-router.post('/stop', checkDB, async (req, res) => {
+router.post('/stop', checkDB, authenticateToken, requireRole(['Driver', 'Admin']), async (req, res) => {
   console.log('--- Stop Trip Tracking Request ---');
   try {
     const { loadId } = req.body;
@@ -172,18 +182,19 @@ router.post('/stop', checkDB, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing loadId' });
     }
 
-    const tracking = await Tracking.findOneAndUpdate(
-      { loadId },
-      {
-        tripStatus: 'stopped',
-        timestamp: new Date()
-      },
-      { new: true }
-    );
-
+    const tracking = await Tracking.findOne({ loadId });
     if (!tracking) {
       return res.status(404).json({ success: false, message: 'No tracking session found' });
     }
+
+    // Role check: Ensure the caller is the driver assigned to this tracking session
+    if (req.user.role !== 'Admin' && tracking.driverId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You are not the driver assigned to this trip.' });
+    }
+
+    tracking.tripStatus = 'stopped';
+    tracking.timestamp = new Date();
+    await tracking.save();
 
     // Sync status to Firestore
     await updateFirestoreTrip(loadId, {
@@ -201,7 +212,7 @@ router.post('/stop', checkDB, async (req, res) => {
 
 // 3.5. Get All Active Trips (For Admin Fleet Monitor Map)
 // GET /api/tracking/active/all
-router.get('/active/all', checkDB, async (req, res) => {
+router.get('/active/all', checkDB, authenticateToken, requireRole(['Admin']), async (req, res) => {
   try {
     const Load = require('../models/Load');
     const [loads, trackings] = await Promise.all([
@@ -233,11 +244,26 @@ router.get('/active/all', checkDB, async (req, res) => {
 
 // 4. Get Live Location
 // GET /api/tracking/:loadId
-router.get('/:loadId', checkDB, async (req, res) => {
+router.get('/:loadId', checkDB, authenticateToken, requireRole(['Driver', 'Load Owner', 'Admin']), async (req, res) => {
   try {
     const tracking = await Tracking.findOne({ loadId: req.params.loadId });
     if (!tracking) {
       return res.status(404).json({ success: false, message: 'No live tracking data available' });
+    }
+
+    // Check permissions: Owner of load or assigned Driver can view
+    if (req.user.role !== 'Admin') {
+      const Load = require('../models/Load');
+      const load = await Load.findById(req.params.loadId);
+      if (!load) {
+        return res.status(404).json({ success: false, message: 'Load not found' });
+      }
+      if (req.user.role === 'Driver' && load.driverId !== req.user.id) {
+        return res.status(403).json({ success: false, message: 'Forbidden. You are not the driver assigned to this load.' });
+      }
+      if (req.user.role === 'Load Owner' && load.userId !== req.user.id) {
+        return res.status(403).json({ success: false, message: 'Forbidden. You do not own this load.' });
+      }
     }
 
     res.status(200).json({ success: true, tracking });
@@ -248,4 +274,3 @@ router.get('/:loadId', checkDB, async (req, res) => {
 });
 
 module.exports = router;
-

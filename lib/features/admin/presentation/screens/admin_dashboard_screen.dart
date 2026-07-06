@@ -20,6 +20,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   List<Map<String, dynamic>> _recentLoads = [];
   List<Map<String, dynamic>> _recentUsers = [];
   List<Map<String, dynamic>> _bids = [];
+  List<Map<String, dynamic>> _otpLogs = [];
+  List<Map<String, dynamic>> _blockedPhones = [];
+  
+  final _blockPhoneController = TextEditingController();
+  final _blockReasonController = TextEditingController();
 
   @override
   void initState() {
@@ -34,6 +39,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       final loads = await _adminRepo.fetchLoads();
       final users = await _adminRepo.fetchUsers();
       final bids = await _adminRepo.fetchBids();
+      final otpLogs = await _adminRepo.fetchOtpLogs();
+      final blockedPhones = await _adminRepo.fetchBlockedPhones();
       
       if (mounted) {
         setState(() {
@@ -41,6 +48,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           _recentLoads = loads;
           _recentUsers = users;
           _bids = bids;
+          _otpLogs = otpLogs;
+          _blockedPhones = blockedPhones;
           _isLoading = false;
         });
       }
@@ -50,6 +59,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         SnackBarUtils.showError(context, 'Error: $e');
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _blockPhoneController.dispose();
+    _blockReasonController.dispose();
+    super.dispose();
   }
 
   @override
@@ -92,6 +108,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   _buildSectionTitle('User Management', Icons.people),
                   const SizedBox(height: 16),
                   _buildUserList(),
+                  const SizedBox(height: 32),
+                  _buildSectionTitle('OTP Login Logs & History', Icons.history),
+                  const SizedBox(height: 16),
+                  _buildOtpLogList(),
+                  const SizedBox(height: 32),
+                  _buildSectionTitle('Blocked Suspicious Numbers', Icons.block),
+                  const SizedBox(height: 16),
+                  _buildBlockPhoneManagement(),
                 ],
               ),
             ),
@@ -430,6 +454,192 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       case 'completed': return Colors.green;
       case 'cancelled': return Colors.red;
       default: return Colors.grey;
+    }
+  }
+
+  Widget _buildOtpLogList() {
+    if (_otpLogs.isEmpty) {
+      return _buildEmptyState('No OTP logs found');
+    }
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _otpLogs.length > 8 ? 8 : _otpLogs.length,
+      itemBuilder: (context, index) {
+        final log = _otpLogs[index];
+        final action = log['action'] ?? '';
+        final details = log['details'] ?? '';
+        
+        String timeStr = 'N/A';
+        if (log['timestamp'] != null) {
+          try {
+            final dt = DateTime.parse(log['timestamp']);
+            timeStr = "${dt.day}/${dt.month} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}";
+          } catch (_) {}
+        }
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: _getOtpActionColor(action).withValues(alpha: 0.1),
+              child: Icon(_getOtpActionIcon(action), color: _getOtpActionColor(action), size: 18),
+            ),
+            title: Text(log['phone'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(details.isNotEmpty ? "$action • $details" : action, style: const TextStyle(fontSize: 12)),
+            trailing: Text(timeStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          ),
+        );
+      },
+    );
+  }
+
+  IconData _getOtpActionIcon(String action) {
+    switch (action) {
+      case 'SEND_OTP': return Icons.send;
+      case 'VERIFY_SUCCESS': return Icons.verified;
+      case 'VERIFY_FAILED': return Icons.gpp_bad;
+      case 'BLOCKED': return Icons.block_flipped;
+      default: return Icons.info_outline;
+    }
+  }
+
+  Color _getOtpActionColor(String action) {
+    switch (action) {
+      case 'SEND_OTP': return Colors.blue;
+      case 'VERIFY_SUCCESS': return Colors.green;
+      case 'VERIFY_FAILED': return Colors.red;
+      case 'BLOCKED': return Colors.orange;
+      default: return Colors.grey;
+    }
+  }
+
+  Widget _buildBlockPhoneManagement() {
+    return Column(
+      children: [
+        // Blocking form
+        Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Block New Number', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _blockPhoneController,
+                        keyboardType: TextInputType.phone,
+                        maxLength: 10,
+                        decoration: const InputDecoration(
+                          hintText: 'Phone (10 digits)',
+                          counterText: '',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller: _blockReasonController,
+                        decoration: const InputDecoration(
+                          hintText: 'Reason for blocking',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: _submitBlockPhone,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      ),
+                      child: const Text('Block'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        
+        // Blocked list
+        if (_blockedPhones.isEmpty)
+          _buildEmptyState('No blocked numbers found')
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _blockedPhones.length,
+            itemBuilder: (context, index) {
+              final blocked = _blockedPhones[index];
+              final phone = blocked['phone'] ?? '';
+              final reason = blocked['reason'] ?? 'Suspicious activity';
+              
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Colors.redAccent,
+                    child: Icon(Icons.block, color: Colors.white, size: 18),
+                  ),
+                  title: Text(phone, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                  subtitle: Text('Reason: $reason'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.lock_open, color: Colors.green),
+                    tooltip: 'Unblock Number',
+                    onPressed: () => _unblockPhone(phone),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Future<void> _submitBlockPhone() async {
+    final phone = _blockPhoneController.text.trim();
+    final reason = _blockReasonController.text.trim();
+    if (phone.length != 10) {
+      SnackBarUtils.showWarning(context, 'Please enter a valid 10-digit number');
+      return;
+    }
+    
+    setState(() => _isLoading = true);
+    try {
+      await _adminRepo.blockPhone(phone, reason.isNotEmpty ? reason : 'Blocked by Admin');
+      _blockPhoneController.clear();
+      _blockReasonController.clear();
+      if (mounted) SnackBarUtils.showSuccess(context, 'Blocked $phone successfully');
+      _refreshData();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) SnackBarUtils.showError(context, 'Blocking failed: $e');
+    }
+  }
+
+  Future<void> _unblockPhone(String phone) async {
+    setState(() => _isLoading = true);
+    try {
+      await _adminRepo.unblockPhone(phone);
+      if (mounted) SnackBarUtils.showSuccess(context, 'Unblocked $phone successfully');
+      _refreshData();
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) SnackBarUtils.showError(context, 'Unblocking failed: $e');
     }
   }
 }
