@@ -6,6 +6,12 @@ class ApiService {
   // Actual Render Backend URL
   static const String baseUrl = 'https://transifygo-backend.onrender.com/api';
   
+  static final ApiService _instance = ApiService._internal();
+
+  factory ApiService() {
+    return _instance;
+  }
+  
   final Dio _dio = Dio(BaseOptions(
     baseUrl: baseUrl,
     connectTimeout: const Duration(seconds: 30),
@@ -16,7 +22,7 @@ class ApiService {
     },
   ));
 
-  ApiService() {
+  ApiService._internal() {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         // Normalize base URL and path to prevent Dio path-absolute resolution stripping the /api/ segment
