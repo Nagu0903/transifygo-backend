@@ -424,6 +424,12 @@ router.post('/firebase-token', checkDB, async (req, res) => {
       firebaseToken: customToken
     });
 
+  } catch (err) {
+    console.error('Firebase Token Error:', err);
+    res.status(500).json({ success: false, message: 'Failed to generate Firebase token', error: err.message });
+  }
+});
+
 // Firebase ID Token Login / Auto-Signup API
 router.post('/firebase-login', checkDB, async (req, res) => {
   console.log('--- Firebase Token Login Request Started ---');
