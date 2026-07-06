@@ -1,14 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:transify_app/core/network/api_service.dart';
+import 'package:transify_app/firebase_options.dart';
 
 /// Abstraction for OTP delivery and verification.
 /// Allows swapping between Firebase, MSG91, Twilio, etc.
 abstract class OtpProvider {
   Future<void> sendOtp({
     required String phone,
+    required String role,
     required Function(String verificationId, int? resendToken) onCodeSent,
     required Function(String errorMessage) onFailed,
+    Function(Map<String, dynamic> authResponse)? onVerificationCompleted,
     int? forceResendToken,
   });
 
@@ -24,11 +27,18 @@ class FirebaseOtpProvider implements OtpProvider {
   final ApiService _apiService = ApiService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  String _redactPhone(String phone) {
+    if (phone.length < 4) return '***';
+    return '${phone.substring(0, phone.length - 4).replaceAll(RegExp(r'.'), '*')}${phone.substring(phone.length - 4)}';
+  }
+
   @override
   Future<void> sendOtp({
     required String phone,
+    required String role,
     required Function(String verificationId, int? resendToken) onCodeSent,
     required Function(String errorMessage) onFailed,
+    Function(Map<String, dynamic> authResponse)? onVerificationCompleted,
     int? forceResendToken,
   }) async {
     // Format phone to E.164 (India prefix +91)
@@ -42,12 +52,42 @@ class FirebaseOtpProvider implements OtpProvider {
         forceResendingToken: forceResendToken,
         verificationCompleted: (PhoneAuthCredential credential) async {
           debugPrint('[FirebaseOtpProvider] [LOG] verificationCompleted callback: Auto-retrieved credentials.');
-          // Auto-verification is handled by user submitting the OTP from UI input.
+          try {
+            final userCredential = await _auth.signInWithCredential(credential);
+            final idToken = await userCredential.user!.getIdToken();
+            if (idToken != null && idToken.isNotEmpty && onVerificationCompleted != null) {
+              debugPrint('[FirebaseOtpProvider] [SUCCESS] Firebase ID token obtained via auto-verification.');
+              final response = await _apiService.post('/auth/firebase-login', {
+                'role': role,
+                'idToken': idToken,
+              });
+              if (response.data['success'] == true) {
+                onVerificationCompleted(response.data);
+              } else {
+                onFailed(response.data['message'] ?? 'Auto-verification login failed');
+              }
+            }
+          } catch (e) {
+            debugPrint('[FirebaseOtpProvider] [ERROR] Auto-verification login exception: $e');
+            onFailed(e.toString());
+          }
         },
         verificationFailed: (FirebaseAuthException e) {
-          debugPrint('[FirebaseOtpProvider] [ERROR] verificationFailed: code="${e.code}", message="${e.message}"');
+          final buildMode = kReleaseMode ? 'release' : 'debug';
+          final redactedPhone = _redactPhone(phone);
+          final projectId = DefaultFirebaseOptions.android.projectId;
+          const packageId = 'com.transify.app';
+
+          debugPrint('[FIREBASE_AUTH_FAILED] code="${e.code}"');
+          debugPrint('[FIREBASE_AUTH_FAILED] message="${e.message}"');
+          debugPrint('[FIREBASE_AUTH_FAILED] phone="$redactedPhone"');
+          debugPrint('[FIREBASE_AUTH_FAILED] projectId="$projectId"');
+          debugPrint('[FIREBASE_AUTH_FAILED] packageId="$packageId"');
+          debugPrint('[FIREBASE_AUTH_FAILED] buildMode="$buildMode"');
+
           String friendlyError = 'Failed to verify phone number. Please try again.';
-          if (e.code == 'billing-not-enabled' || e.code == 'missing-client-identifier') {
+          if (e.code == 'billing-not-enabled' || 
+              (e.message != null && e.message!.toUpperCase().contains('BILLING_NOT_ENABLED'))) {
             friendlyError = 'OTP service is temporarily unavailable. Please contact support.';
           } else if (e.code == 'invalid-phone-number') {
             friendlyError = 'The phone number entered is invalid.';
@@ -118,8 +158,10 @@ class BackendOtpProvider implements OtpProvider {
   @override
   Future<void> sendOtp({
     required String phone,
+    required String role,
     required Function(String verificationId, int? resendToken) onCodeSent,
     required Function(String errorMessage) onFailed,
+    Function(Map<String, dynamic> authResponse)? onVerificationCompleted,
     int? forceResendToken,
   }) async {
     debugPrint('[BackendOtpProvider] [LOG] Sending OTP request to backend for $phone');

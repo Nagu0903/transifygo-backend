@@ -110,6 +110,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     try {
       await OtpService.provider.sendOtp(
         phone: phone,
+        role: widget.role,
         forceResendToken: _resendToken,
         onCodeSent: (String verificationId, int? resendToken) {
           _uiTimeoutTimer?.cancel();
@@ -130,6 +131,18 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           });
           if (mounted) {
             SnackBarUtils.showError(context, errorMessage);
+          }
+        },
+        onVerificationCompleted: (Map<String, dynamic> authResponse) {
+          _uiTimeoutTimer?.cancel();
+          final token = authResponse['token'];
+          final userMap = authResponse['user'];
+          final userModel = UserModel.fromMap(userMap, userMap['id'] ?? userMap['_id']);
+          setState(() {
+            _isLoading = false;
+          });
+          if (mounted) {
+            context.read<AuthBloc>().add(OtpLoginSucceeded(token: token, user: userModel));
           }
         },
       );
