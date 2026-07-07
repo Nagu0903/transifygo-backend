@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/localization/language_provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:transify_app/core/constants/app_colors.dart';
+import 'package:transify_app/core/localization/language_provider.dart';
+import 'package:transify_app/core/services/session_service.dart';
 import 'login_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
@@ -16,10 +19,15 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> with SingleTi
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  
+  bool _isLoggedIn = false;
+  String? _userName;
+  String? _userPhone;
 
   @override
   void initState() {
     super.initState();
+    _checkLoginStatus();
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -42,6 +50,28 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> with SingleTi
     super.dispose();
   }
 
+  Future<void> _checkLoginStatus() async {
+    final loggedIn = await SessionService.isLoggedIn();
+    if (loggedIn) {
+      final session = await SessionService.getSession();
+      if (mounted) {
+        setState(() {
+          _isLoggedIn = true;
+          _userName = session['name'];
+          _userPhone = session['phone'];
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isLoggedIn = false;
+          _userName = null;
+          _userPhone = null;
+        });
+      }
+    }
+  }
+
   void _navigateToLogin(BuildContext context, String role) {
     Navigator.push(
       context,
@@ -58,7 +88,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> with SingleTi
         },
         transitionDuration: const Duration(milliseconds: 400),
       ),
-    );
+    ).then((_) => _checkLoginStatus());
   }
 
   Future<void> _launchURL(String urlString) async {
@@ -153,33 +183,67 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> with SingleTi
         backgroundColor: AppColors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
-        centerTitle: true,
-        leadingWidth: 56,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16.0),
-          child: Image.asset(
-            'assets/logo/logo.png',
-            width: 36,
-            height: 36,
-          ),
-        ),
-        title: const Text(
-          'TransifyGo',
-          style: TextStyle(
-            color: Color(0xFF0D1B2A),
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            letterSpacing: -0.5,
-          ),
+        automaticallyImplyLeading: false,
+        titleSpacing: 16,
+        title: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.blue.shade100, width: 1.5),
+              ),
+              padding: const EdgeInsets.all(4),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.asset(
+                  'assets/logo/logo.png',
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'TransifyGo',
+                  style: TextStyle(
+                    color: Color(0xFF0D1B2A),
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                Text(
+                  'Smart Logistics Network',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.menu, color: Color(0xFF0D1B2A), size: 28),
-            onPressed: () {
-              scaffoldKey.currentState?.openEndDrawer();
-            },
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.menu, color: Color(0xFF0D1B2A), size: 24),
+              onPressed: () {
+                scaffoldKey.currentState?.openEndDrawer();
+              },
+            ),
           ),
-          const SizedBox(width: 8),
         ],
       ),
       endDrawer: Drawer(
@@ -195,7 +259,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> with SingleTi
             // Drawer Header
             DrawerHeader(
               decoration: BoxDecoration(
-                color: AppColors.primaryBlue.withValues(alpha: 0.05),
+                color: Colors.blue.shade50.withValues(alpha: 0.4),
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(24),
                 ),
@@ -204,20 +268,44 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> with SingleTi
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Image.asset(
-                      'assets/logo/logo.png',
-                      width: 64,
-                      height: 64,
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue.shade100, width: 1.5),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.asset(
+                          'assets/logo/logo.png',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'TransifyGo Menu',
-                      style: TextStyle(
+                    const SizedBox(height: 10),
+                    Text(
+                      _userName ?? 'TransifyGo Menu',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
                         color: Color(0xFF0D1B2A),
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    if (_userPhone != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        _userPhone!,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -292,6 +380,41 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> with SingleTi
                       _navigateToLogin(context, 'Admin');
                     },
                   ),
+                  if (_isLoggedIn) ...[
+                    const Divider(height: 32, thickness: 1, indent: 20, endIndent: 20),
+                    _buildDrawerItem(
+                      icon: Icons.logout_rounded,
+                      title: 'Logout',
+                      iconColor: Colors.red.shade700,
+                      textColor: Colors.red.shade900,
+                      tileColor: Colors.red.shade50.withValues(alpha: 0.4),
+                      onTap: () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        Navigator.pop(context);
+                        await SessionService.clearSession();
+                        try {
+                          await FirebaseAuth.instance.signOut();
+                        } catch (e) {
+                          debugPrint('[FirebaseAuth] SignOut Error: $e');
+                        }
+                        _checkLoginStatus();
+                        
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: const Row(
+                              children: [
+                                Icon(Icons.check_circle_outline, color: Colors.white),
+                                SizedBox(width: 8),
+                                Text('Logged out successfully', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            backgroundColor: Colors.green.shade600,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -299,7 +422,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> with SingleTi
             Padding(
               padding: const EdgeInsets.only(bottom: 24.0),
               child: Text(
-                'v1.1.0',
+                'v1.0.0',
                 style: TextStyle(
                   color: Colors.grey.shade400,
                   fontSize: 12,
@@ -315,107 +438,59 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> with SingleTi
           opacity: _fadeAnimation,
           child: ScaleTransition(
             scale: _scaleAnimation,
-            child: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          const SizedBox(height: 32),
-                          // Subtitle Selection header
-                          Text(
-                            lang.translate('role_selection'),
-                            style: const TextStyle(
-                              color: Color(0xFF0D1B2A),
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "Choose your role to log in or register",
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 40),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final maxWidth = constraints.maxWidth;
+                final isTablet = maxWidth > 600;
 
-                          // 1. Post Load Card
-                          _buildPremiumRoleCard(
-                            context,
-                            title: lang.translate('post_load'),
-                            description: lang.translate('post_load_desc'),
-                            icon: Icons.inventory_2_outlined,
-                            onTap: () => _navigateToLogin(context, 'Load Owner'),
+                return Center(
+                  child: Container(
+                    constraints: BoxConstraints(
+                      maxWidth: isTablet ? 600 : double.infinity,
+                    ),
+                    child: CustomScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.all(20),
+                          sliver: SliverList(
+                            delegate: SliverChildListDelegate([
+                              // Hero Card
+                              _buildHeroCard(),
+                              const SizedBox(height: 24),
+                              
+                              // Section Title
+                              _buildSectionTitle(lang),
+                              const SizedBox(height: 16),
+                              
+                              // Post Load Card
+                              InteractiveScaleCard(
+                                onTap: () => _navigateToLogin(context, 'Load Owner'),
+                                child: _buildPostLoadCard(lang),
+                              ),
+                              const SizedBox(height: 16),
+                              
+                              // Driver Card
+                              InteractiveScaleCard(
+                                onTap: () => _navigateToLogin(context, 'Driver'),
+                                child: _buildDriverCard(lang),
+                              ),
+                              const SizedBox(height: 24),
+                              
+                              // Trust Strip
+                              _buildTrustStrip(),
+                              const SizedBox(height: 32),
+                              
+                              // Footer
+                              _buildFooter(lang),
+                            ]),
                           ),
-                          
-                          const SizedBox(height: 24),
-
-                          // 2. Driver Card
-                          _buildPremiumRoleCard(
-                            context,
-                            title: lang.translate('driver'),
-                            description: lang.translate('driver_desc'),
-                            icon: Icons.local_shipping_outlined,
-                            onTap: () => _navigateToLogin(context, 'Driver'),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-
-                // Footer section
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24.0),
-                  child: Column(
-                    children: [
-                      Text(
-                        'Version 1.0.0',
-                        style: TextStyle(
-                          color: Colors.grey.shade400,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '© 2026 TransifyGo',
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Made in India ',
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const Text(
-                            '🇮🇳',
-                            style: TextStyle(fontSize: 13),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                );
+              },
             ),
           ),
         ),
@@ -455,67 +530,97 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> with SingleTi
     );
   }
 
-  Widget _buildPremiumRoleCard(
-    BuildContext context, {
-    required String title,
-    required String description,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.grey.shade200, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
+  Widget _buildHeroCard() {
+    return Container(
+      height: 190,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF0D47A1), // Premium Blue
+            Color(0xFF1976D2), // Lighter Blue
           ],
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0D47A1).withValues(alpha: 0.2),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Stack(
           children: [
-            // Icon Container
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.primaryBlue.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(
-                icon,
-                color: AppColors.primaryBlue,
-                size: 32,
+            // Decorative shapes
+            Positioned(
+              right: -30,
+              top: -30,
+              child: Container(
+                width: 150,
+                height: 150,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
               ),
             ),
-            const SizedBox(width: 20),
+            Positioned(
+              right: 20,
+              bottom: -40,
+              child: Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
             
-            // Text Details
-            Expanded(
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(24.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0D1B2A),
+                  const Text(
+                    'Welcome to TransifyGo',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    description,
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Move Loads. Find Vehicles.\nGrow Your Business.',
                     style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade600,
-                      height: 1.4,
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      height: 1.25,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      "India's Smart Logistics Network",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
@@ -523,6 +628,452 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> with SingleTi
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(LanguageProvider lang) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Choose a Service',
+          style: TextStyle(
+            color: Color(0xFF0D1B2A),
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
+        ),
+        SizedBox(height: 4),
+        Text(
+          'What would you like to do today?',
+          style: TextStyle(
+            color: Colors.grey,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPostLoadCard(LanguageProvider lang) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade100, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Icon Container
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3E0), // Soft orange
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.inventory_2_outlined,
+                  color: Color(0xFFE65100), // Dark orange
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Text Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      lang.translate('post_load'),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0D1B2A),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      lang.translate('post_load_desc'),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Arrow Icon
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Colors.grey.shade400,
+                size: 16,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Chips
+          const Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _FeatureChip(label: 'Quick Posting'),
+              _FeatureChip(label: 'Verified Network'),
+              _FeatureChip(label: 'Easy Management'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDriverCard(LanguageProvider lang) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade100, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Icon Container
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE3F2FD), // Soft blue
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.local_shipping_outlined,
+                  color: Color(0xFF0D47A1), // Dark blue
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Text Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          lang.translate('driver'),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0D1B2A),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Owner',
+                            style: TextStyle(
+                              color: Colors.blue.shade800,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'For Drivers & Vehicle Owners',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      lang.translate('driver_desc'),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Arrow Icon
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Colors.grey.shade400,
+                size: 16,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Chips
+          const Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _FeatureChip(label: 'Nearby Loads'),
+              _FeatureChip(label: 'Smart Bidding'),
+              _FeatureChip(label: 'Trip Management'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrustStrip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade100, width: 1),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _TrustItem(icon: Icons.verified_user_outlined, label: 'Secure Platform'),
+          _TrustItem(icon: Icons.people_outline_rounded, label: 'Verified Network'),
+          _TrustItem(icon: Icons.support_agent_rounded, label: '24/7 Support'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooter(LanguageProvider lang) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _FooterLink(
+              label: 'Privacy',
+              onTap: () => _launchURL('https://transifygo.com/privacy-policy'),
+            ),
+            const _FooterBullet(),
+            _FooterLink(
+              label: 'Terms',
+              onTap: () => _launchURL('https://transifygo.com/terms-and-conditions'),
+            ),
+            const _FooterBullet(),
+            _FooterLink(
+              label: 'Support',
+              onTap: () => _launchURL('tel:6363788419'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Version 1.0.0',
+          style: TextStyle(
+            color: Colors.grey,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          '© 2026 TransifyGo',
+          style: TextStyle(
+            color: Colors.grey,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'Made in India ',
+              style: TextStyle(
+                color: Colors.grey.shade500,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const Text(
+              '🇮🇳',
+              style: TextStyle(fontSize: 12),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class InteractiveScaleCard extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+
+  const InteractiveScaleCard({
+    super.key,
+    required this.child,
+    required this.onTap,
+  });
+
+  @override
+  State<InteractiveScaleCard> createState() => _InteractiveScaleCardState();
+}
+
+class _InteractiveScaleCardState extends State<InteractiveScaleCard> {
+  double _scale = 1.0;
+
+  void _onTapDown(TapDownDetails details) {
+    setState(() {
+      _scale = 0.97;
+    });
+  }
+
+  void _onTapUp(TapUpDetails details) {
+    setState(() {
+      _scale = 1.0;
+    });
+  }
+
+  void _onTapCancel() {
+    setState(() {
+      _scale = 1.0;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: _onTapDown,
+      onTapUp: _onTapUp,
+      onTapCancel: _onTapCancel,
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _scale,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeInOut,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+class _FeatureChip extends StatelessWidget {
+  final String label;
+  const _FeatureChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200, width: 0.8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: Colors.grey.shade700,
+          fontSize: 10.5,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+}
+
+class _TrustItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _TrustItem({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: Colors.blue.shade800, size: 16),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.grey.shade700,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FooterLink extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _FooterLink({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Text(
+        label,
+        style: TextStyle(
+          color: Colors.blue.shade800,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+}
+
+class _FooterBullet extends StatelessWidget {
+  const _FooterBullet();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      width: 4,
+      height: 4,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade400,
+        shape: BoxShape.circle,
       ),
     );
   }
